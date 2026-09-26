@@ -47,6 +47,9 @@ export class Layer {
   fontColor: string | any = "#000000";
   textAlign: CanvasTextAlign = "left";
   textJustify = false;
+  letterSpacing = 0;
+  wordSpacing = 0;
+  lineSpacing = 0;
   paddingLeft = 0;
   paddingRight = 0;
   textureImage: HTMLImageElement | null = null;
@@ -74,6 +77,85 @@ export class Layer {
   itemBgPaddingTop = 0;
   itemBgPaddingBottom = 0;
   itemBgRadius = 0;
+  // Stroke
+  strokeColor: string | { kind: string; [key: string]: any } | null = null;
+  strokeImage: HTMLImageElement | null = null;
+  strokeWidth = 0;
+
+  // Shadow — string hex hoặc BackgroundFill object (gradient)
+  shadowColor: string | { kind: string; [key: string]: any } = "#000000";
+  shadowOpacity = 0.5;
+  shadowBlur = 4;
+  shadowOffsetX = 0;
+  shadowOffsetY = 4;
+  shadowOuterGlow = false;
+  shadowEnabled = false;
+
+  // Inner Shadow — bóng đổ vào bên trong chữ (mask alpha của chính chữ)
+  innerShadowColor: string | { kind: string; [key: string]: any } = "#000000";
+  innerShadowOpacity = 0.6;
+  innerShadowBlur = 5;
+  innerShadowOffsetX = 0;
+  innerShadowOffsetY = 4;
+  innerShadowEnabled = false;
+
+  // Emboss (3D Relief & Lighting)
+  embossEnabled = false;
+  embossAngle = 90; // độ (0 - 360)
+  embossIntensity = 50; // 0 - 100
+  embossAmbient = 50; // 0 - 100
+  embossHardness = 20; // 0 - 100 (specular hardness)
+  embossBevel = 3; // 0 - 100 (độ dày bevel / radius)
+
+  // Perspective (4 corner warp)
+  perspectiveEnabled = false;
+  // Normalized corner offsets [-1..1] or relative [tl, tr, br, bl]
+  perspectivePoints: { tl: { x: number; y: number }; tr: { x: number; y: number }; br: { x: number; y: number }; bl: { x: number; y: number } } = {
+    tl: { x: 0, y: 0 },
+    tr: { x: 0, y: 0 },
+    br: { x: 0, y: 0 },
+    bl: { x: 0, y: 0 },
+  };
+
+  // 3D Rotate (X Axis & Y Axis in degrees: -180 ~ 180)
+  rotate3dX = 0;
+  rotate3dY = 0;
+
+  // 3D Text (Extrusion / Depth)
+  text3dEnabled = false;
+  text3dViewType: "perspective" | "oblique" = "oblique";
+  text3dDepth = 15; // 1 - 100
+  text3dColorMode: "auto" | "color" = "auto";
+  text3dColor: string | { kind: string; [key: string]: any } = "#000000";
+  text3dDarken = 30; // 0 - 100 (%)
+  text3dRotateX = 0; // -80° ~ 80°
+  text3dRotateY = 0; // -80° ~ 80°
+  text3dRotateZ = 0; // -180° ~ 180°
+
+  // 3D Text Lighting (Simulate lighting)
+  text3dLightingEnabled = false;
+  text3dLightAngle = 90; // 0 - 360 (degrees)
+  text3dLightIntensity = 80; // 0 - 100
+  text3dLightShadow = 40; // 0 - 100
+  text3dLightSpecular = 30; // 0 - 100 (Specular Hardness)
+
+  // 3D Shadow (Bóng đổ 3D mặt sàn / nền)
+  shadow3dEnabled = false;
+  shadow3dColor: string | { kind: string; [key: string]: any } = "#000000";
+  shadow3dOpacity = 0.5; // 0% ~ 100% (0 ~ 1)
+  shadow3dBlur = 4; // 0 ~ 25
+  shadow3dExpand = 0; // 0 ~ 50 (Expand by)
+  shadow3dAngle = 135; // 0 ~ 360 degrees (direction of shadow)
+  shadow3dDistance = 26; // 0 ~ 100 (length of shadow)
+
+  // Reflection (Phản chiếu bóng gương lật ngược phía dưới)
+  reflectionEnabled = false;
+  reflectionOffset = 0; // -100 ~ 100 (0 là sát mép chân chữ chính, âm là lấn lên trên chữ, dương là lùi xuống)
+
+  // Cache mask alpha cho inner shadow (chỉ dựng lại khi layout chữ đổi)
+  _innerShadowMaskCanvas: HTMLCanvasElement | null = null;
+  _innerShadowMaskKey = "";
+  _innerShadowMaskBBox: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
 
   // Image reference nếu là background / image layer
   image?: HTMLImageElement;
@@ -132,7 +214,7 @@ export class Layer {
     this.ctx.textAlign = this.textAlign;
 
     const lines = String(this.text).split("\n");
-    const lineHeight = Math.round(this.fontSize * 1.2);
+    const lineHeight = Math.round(this.fontSize * 1.2 + (this.lineSpacing || 0));
     for (let i = 0; i < lines.length; i++) {
       this.ctx.fillText(lines[i], x, y + i * lineHeight);
     }

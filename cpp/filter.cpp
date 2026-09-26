@@ -3,7 +3,7 @@
 #include <algorithm>
 
 /**
- * C++ WASM Image Processing Core cho Typorig
+ * C++ WASM Image Processing Core cho Pixorig
  * Biên dịch bằng Emscripten (emcc) ra WebAssembly
  */
 

@@ -1,6 +1,6 @@
-# Typorig
+# Pixorig
 
-**Typorig** is a browser-based image editing tool that runs entirely on the frontend. Built with TypeScript, Vite, and WebAssembly (WASM) — no heavy frameworks like React, Vue, or Angular. Uses a custom JSX runtime for lightweight DOM rendering.
+**Pixorig** is a browser-based image editing tool that runs entirely on the frontend. Built with TypeScript, Vite, and WebAssembly (WASM) — no heavy frameworks like React, Vue, or Angular. Uses a custom JSX runtime for lightweight DOM rendering.
 
 ## Features
 
@@ -14,12 +14,12 @@
 
 ## Comparison with Other Tools
 
-| Tool | Typorig Advantage |
+| Tool | Pixorig Advantage |
 |------|-------------------|
 | **Photopea** | Simpler and more beginner-friendly, focusing on ease of use over complexity. |
-| **PixelLab (mobile)** | PixelLab lacks a web or desktop version. Typorig works on any platform with a browser. |
-| **Canva** | Basic features like custom fonts often require payment. Gradient design is very limited. Typorig offers more freedom. |
-| **Adobe Photoshop** | Overly complex, forces app installation. No adequate mobile version. Typorig runs instantly in the browser. |
+| **PixelLab (mobile)** | PixelLab lacks a web or desktop version. Pixorig works on any platform with a browser. |
+| **Canva** | Basic features like custom fonts often require payment. Gradient design is very limited. Pixorig offers more freedom. |
+| **Adobe Photoshop** | Overly complex, forces app installation. No adequate mobile version. Pixorig runs instantly in the browser. |
 
 ## Tech Stack
 
@@ -48,7 +48,7 @@ npm run preview
 ## Project Structure
 
 ```
-Typorig/
+Pixorig/
 ├── index.html              # Main entry point
 ├── css/
 │   └── styles.css          # Stylesheets
@@ -95,7 +95,7 @@ Push to `master` branch triggers GitHub Actions workflow:
 2. Upload `dist/` as artifact
 3. Deploy to GitHub Pages
 
-Live at: **https://typorig.github.io/**
+Repository: **https://github.com/Pixorig/Pixorig**
 
 ## License
 

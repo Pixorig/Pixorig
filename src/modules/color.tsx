@@ -6,6 +6,7 @@
 import { h } from "../ui/jsx";
 import { eventBus } from "../core/event-bus";
 import { Layer, LayerManager } from "../core/layer";
+import { TabBar } from "../ui/TabBar";
 
 export interface ColorSwatchItem {
   name: string;
@@ -115,7 +116,7 @@ class ColorService {
 
   private loadCustomGradients(): void {
     try {
-      const saved = localStorage.getItem("typorig_custom_gradients");
+      const saved = localStorage.getItem("pixorig_custom_gradients");
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) this.customPresets = parsed;
@@ -128,7 +129,7 @@ class ColorService {
   private saveCustomGradients(): void {
     try {
       localStorage.setItem(
-        "typorig_custom_gradients",
+        "pixorig_custom_gradients",
         JSON.stringify(this.customPresets)
       );
     } catch {
@@ -340,7 +341,16 @@ class ColorService {
         id="gradient-plus-btn"
         title="Create custom gradient"
         onClick={() => {
-          eventBus.emit("gradient:open-custom");
+          eventBus.emit("gradient:open-custom", {
+            targetLayer: this.currentOptions.targetLayer,
+            onApply: this.currentOptions.onColorChange
+              ? (gradData: any) => {
+                  if (this.currentOptions.onColorChange) {
+                    this.currentOptions.onColorChange({ kind: "custom", data: gradData });
+                  }
+                }
+              : undefined,
+          });
         }}
       >
         <span
@@ -466,38 +476,18 @@ class ColorService {
 
     const backDiv = <div class="color-back">{backBtn}</div>;
 
-    const tabMono = (
-      <button
-        type="button"
-        class={`color-tab ${this.currentTab === "monochrome" ? "active" : ""}`}
-        onClick={() => {
-          this.currentTab = "monochrome";
-          this.renderUI();
-        }}
-      >
-        Monochrome
-      </button>
-    );
-
-    const tabGrad = (
-      <button
-        type="button"
-        class={`color-tab ${this.currentTab === "gradient" ? "active" : ""}`}
-        onClick={() => {
-          this.currentTab = "gradient";
-          this.renderUI();
-        }}
-      >
-        Gradient
-      </button>
-    );
-
-    const tabsDiv = (
-      <div class="color-tabs">
-        {tabMono}
-        {tabGrad}
-      </div>
-    );
+    const tabsDiv = TabBar({
+      tabs: [
+        { id: "monochrome", label: "Monochrome" },
+        { id: "gradient", label: "Gradient" },
+      ],
+      active: this.currentTab,
+      onChange: (id) => {
+        this.currentTab = id as "monochrome" | "gradient";
+        this.renderUI();
+      },
+    });
+    (tabsDiv as HTMLElement).className = "color-tabs";
 
     const contentDiv = (
       <div class="color-content" style={{ flex: "1", overflowY: "auto" }}>
@@ -522,7 +512,7 @@ class ColorService {
     }
 
     let targetLayer = this.currentOptions.targetLayer;
-    if (!targetLayer && layerManager) {
+    if (targetLayer === undefined && layerManager) {
       targetLayer = layerManager.getActiveLayer();
     }
 
@@ -539,6 +529,7 @@ class ColorService {
 
     const canvas =
       this.currentOptions.canvas ||
+      (layerManager ? layerManager.mainCanvas : null) ||
       (document.getElementById("canvas") as HTMLCanvasElement | null);
     this.lastBackground = { kind: "solid", hex };
 
@@ -576,7 +567,7 @@ class ColorService {
     }
 
     let targetLayer = this.currentOptions.targetLayer;
-    if (!targetLayer && layerManager) {
+    if (targetLayer === undefined && layerManager) {
       targetLayer = layerManager.getActiveLayer();
     }
 
@@ -593,6 +584,7 @@ class ColorService {
 
     const canvas =
       this.currentOptions.canvas ||
+      (layerManager ? layerManager.mainCanvas : null) ||
       (document.getElementById("canvas") as HTMLCanvasElement | null);
     this.lastBackground = gradFill;
 

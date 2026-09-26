@@ -17,6 +17,17 @@ import { CurveModule } from "../modules/curve";
 import { TextureModule } from "../modules/texture";
 import { ItemBackgroundModule } from "../modules/item-background";
 import { TextAlignModule } from "./text-align";
+import { TextSpacingModule } from "./text-spacing";
+import { TextLineSpacingModule } from "./text-line-spacing";
+import { TextStrokeModule } from "./text-stroke";
+import { TextShadowModule } from "./text-shadow";
+import { TextInnerShadowModule } from "./text-inner-shadow";
+import { TextEmbossModule } from "./text-emboss";
+import { TextPerspectiveModule } from "./text-perspective";
+import { Text3DRotateModule } from "./text-3d-rotate";
+import { Text3DModule } from "./text-3d";
+import { Text3DShadowModule } from "./text-3d-shadow";
+import { TextReflectionModule } from "./text-reflection";
 import { TextTransform } from "./text-transform";
 
 export interface TextStyleOptions {
@@ -160,6 +171,17 @@ export class TextUIController {
   private textureModule: TextureModule | null = null;
   private itemBackgroundModule: ItemBackgroundModule | null = null;
   private textAlignModule: TextAlignModule | null = null;
+  private textSpacingModule: TextSpacingModule | null = null;
+  private textLineSpacingModule: TextLineSpacingModule | null = null;
+  private textStrokeModule: TextStrokeModule | null = null;
+  private textShadowModule: TextShadowModule | null = null;
+  private textInnerShadowModule: TextInnerShadowModule | null = null;
+  private textEmbossModule: TextEmbossModule | null = null;
+  private textPerspectiveModule: TextPerspectiveModule | null = null;
+  private text3DRotateModule: Text3DRotateModule | null = null;
+  private text3DModule: Text3DModule | null = null;
+  private text3DShadowModule: Text3DShadowModule | null = null;
+  private textReflectionModule: TextReflectionModule | null = null;
 
   constructor(
     layerManager: LayerManager,
@@ -174,6 +196,17 @@ export class TextUIController {
       this.textureModule = new TextureModule(layerManager, textTransform);
       this.itemBackgroundModule = new ItemBackgroundModule(layerManager, textTransform);
       this.textAlignModule = new TextAlignModule(layerManager, textTransform);
+      this.textSpacingModule = new TextSpacingModule(layerManager, textTransform);
+      this.textLineSpacingModule = new TextLineSpacingModule(layerManager, textTransform);
+      this.textStrokeModule = new TextStrokeModule(layerManager, textTransform);
+      this.textShadowModule = new TextShadowModule(layerManager, textTransform);
+      this.textInnerShadowModule = new TextInnerShadowModule(layerManager, textTransform);
+      this.textEmbossModule = new TextEmbossModule(layerManager, textTransform);
+      this.textPerspectiveModule = new TextPerspectiveModule(layerManager, textTransform);
+      this.text3DRotateModule = new Text3DRotateModule(layerManager, textTransform);
+      this.text3DModule = new Text3DModule(layerManager, textTransform);
+      this.text3DShadowModule = new Text3DShadowModule(layerManager, textTransform);
+      this.textReflectionModule = new TextReflectionModule(layerManager, textTransform);
     }
     this.initEventListeners();
     this.initEventBus();
@@ -185,6 +218,17 @@ export class TextUIController {
     this.textureModule = new TextureModule(this.layerManager, textTransform);
     this.itemBackgroundModule = new ItemBackgroundModule(this.layerManager, textTransform);
     this.textAlignModule = new TextAlignModule(this.layerManager, textTransform);
+    this.textSpacingModule = new TextSpacingModule(this.layerManager, textTransform);
+    this.textLineSpacingModule = new TextLineSpacingModule(this.layerManager, textTransform);
+    this.textStrokeModule = new TextStrokeModule(this.layerManager, textTransform);
+    this.textShadowModule = new TextShadowModule(this.layerManager, textTransform);
+    this.textInnerShadowModule = new TextInnerShadowModule(this.layerManager, textTransform);
+    this.textEmbossModule = new TextEmbossModule(this.layerManager, textTransform);
+    this.textPerspectiveModule = new TextPerspectiveModule(this.layerManager, textTransform);
+    this.text3DRotateModule = new Text3DRotateModule(this.layerManager, textTransform);
+    this.text3DModule = new Text3DModule(this.layerManager, textTransform);
+    this.text3DShadowModule = new Text3DShadowModule(this.layerManager, textTransform);
+    this.textReflectionModule = new TextReflectionModule(this.layerManager, textTransform);
   }
 
   private initEventListeners(): void {
@@ -279,6 +323,39 @@ export class TextUIController {
         break;
       case "align":
         this.openAlignPanel();
+        break;
+      case "spacing":
+        this.openSpacingPanel();
+        break;
+      case "line-spacing":
+        this.openLineSpacingPanel();
+        break;
+      case "stroke":
+        this.openStrokePanel();
+        break;
+      case "shadow":
+        this.openShadowPanel();
+        break;
+      case "inner-shadow":
+        this.openInnerShadowPanel();
+        break;
+      case "emboss":
+        this.openEmbossPanel();
+        break;
+      case "perspective":
+        this.openPerspectivePanel();
+        break;
+      case "3d-rotate":
+        this.open3DRotatePanel();
+        break;
+      case "3d-text":
+        this.open3DTextPanel();
+        break;
+      case "3d-shadow":
+        this.open3DShadowPanel();
+        break;
+      case "reflection":
+        this.openReflectionPanel();
         break;
     }
   }
@@ -548,6 +625,105 @@ export class TextUIController {
     ) as HTMLElement | null;
     if (textPropsGroup && this.textAlignModule) {
       this.textAlignModule.open(textPropsGroup);
+    }
+  }
+
+  openSpacingPanel(): void {
+    const textPropsGroup = document.querySelector(
+      '.sub-group[data-section="text-props"]'
+    ) as HTMLElement | null;
+    if (textPropsGroup && this.textSpacingModule) {
+      this.textSpacingModule.open(textPropsGroup);
+    }
+  }
+
+  openLineSpacingPanel(): void {
+    const textPropsGroup = document.querySelector(
+      '.sub-group[data-section="text-props"]'
+    ) as HTMLElement | null;
+    if (textPropsGroup && this.textLineSpacingModule) {
+      this.textLineSpacingModule.open(textPropsGroup);
+    }
+  }
+
+  openStrokePanel(): void {
+    const textPropsGroup = document.querySelector(
+      '.sub-group[data-section="text-props"]'
+    ) as HTMLElement | null;
+    if (textPropsGroup && this.textStrokeModule) {
+      this.textStrokeModule.open(textPropsGroup);
+    }
+  }
+
+  openShadowPanel(): void {
+    const textPropsGroup = document.querySelector(
+      '.sub-group[data-section="text-props"]'
+    ) as HTMLElement | null;
+    if (textPropsGroup && this.textShadowModule) {
+      this.textShadowModule.open(textPropsGroup);
+    }
+  }
+
+  openInnerShadowPanel(): void {
+    const textPropsGroup = document.querySelector(
+      '.sub-group[data-section="text-props"]'
+    ) as HTMLElement | null;
+    if (textPropsGroup && this.textInnerShadowModule) {
+      this.textInnerShadowModule.open(textPropsGroup);
+    }
+  }
+
+  openEmbossPanel(): void {
+    const textPropsGroup = document.querySelector(
+      '.sub-group[data-section="text-props"]'
+    ) as HTMLElement | null;
+    if (textPropsGroup && this.textEmbossModule) {
+      this.textEmbossModule.open(textPropsGroup);
+    }
+  }
+
+  openPerspectivePanel(): void {
+    const textPropsGroup = document.querySelector(
+      '.sub-group[data-section="text-props"]'
+    ) as HTMLElement | null;
+    if (textPropsGroup && this.textPerspectiveModule) {
+      this.textPerspectiveModule.open(textPropsGroup);
+    }
+  }
+
+  open3DRotatePanel(): void {
+    const textPropsGroup = document.querySelector(
+      '.sub-group[data-section="text-props"]'
+    ) as HTMLElement | null;
+    if (textPropsGroup && this.text3DRotateModule) {
+      this.text3DRotateModule.open(textPropsGroup);
+    }
+  }
+
+  open3DTextPanel(): void {
+    const textPropsGroup = document.querySelector(
+      '.sub-group[data-section="text-props"]'
+    ) as HTMLElement | null;
+    if (textPropsGroup && this.text3DModule) {
+      this.text3DModule.open(textPropsGroup);
+    }
+  }
+
+  open3DShadowPanel(): void {
+    const textPropsGroup = document.querySelector(
+      '.sub-group[data-section="text-props"]'
+    ) as HTMLElement | null;
+    if (textPropsGroup && this.text3DShadowModule) {
+      this.text3DShadowModule.open(textPropsGroup);
+    }
+  }
+
+  openReflectionPanel(): void {
+    const textPropsGroup = document.querySelector(
+      '.sub-group[data-section="text-props"]'
+    ) as HTMLElement | null;
+    if (textPropsGroup && this.textReflectionModule) {
+      this.textReflectionModule.open(textPropsGroup);
     }
   }
 

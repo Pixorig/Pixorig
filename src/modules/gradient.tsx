@@ -8,6 +8,8 @@ import { showPopup, PopupInstance } from "../ui/Popup";
 import { LayerManager, Layer } from "../core/layer";
 import { TextTransform } from "../text/text-transform";
 import { ColorModule } from "./color";
+import { eventBus } from "../core/event-bus";
+import { TabBar } from "../ui/TabBar";
 
 export interface LinearStop {
   offset: number;
@@ -33,6 +35,7 @@ export interface GradientCustomData {
 export interface GradientModuleOptions {
   layerManager?: LayerManager;
   textTransform?: TextTransform;
+  targetLayer?: Layer | null;
   onApply?: (data: GradientCustomData) => void;
 }
 
@@ -66,34 +69,18 @@ export class GradientService {
         style={{ display: "flex", flexDirection: "column", gap: "16px" }}
       >
         {/* 1. Type selector */}
-        <div style={{ display: "flex", gap: "4px" }}>
-          <button
-            type="button"
-            id="cg-type-linear"
-            class={`color-tab ${this.type === "linear" ? "active" : ""}`}
-            style={{ flex: "1" }}
-            onClick={() => {
-              this.type = "linear";
-              this.syncTypeTabs();
-              this.updateUI();
-            }}
-          >
-            Linear (S ➔ E)
-          </button>
-          <button
-            type="button"
-            id="cg-type-radial"
-            class={`color-tab ${this.type === "radial" ? "active" : ""}`}
-            style={{ flex: "1" }}
-            onClick={() => {
-              this.type = "radial";
-              this.syncTypeTabs();
-              this.updateUI();
-            }}
-          >
-            Circular (Radial Mesh)
-          </button>
-        </div>
+        {TabBar({
+          tabs: [
+            { id: "linear", label: "Linear (S ➔ E)" },
+            { id: "radial", label: "Circular (Radial Mesh)" },
+          ],
+          active: this.type,
+          onChange: (id) => {
+            this.type = id as "linear" | "radial";
+            this.syncTypeTabs();
+            this.updateUI();
+          },
+        })}
 
         {/* 2. Interactive Canvas Area */}
         <div
@@ -389,17 +376,6 @@ export class GradientService {
   }
 
   private syncTypeTabs(): void {
-    const tabLinear = document.getElementById("cg-type-linear");
-    const tabRadial = document.getElementById("cg-type-radial");
-    if (tabLinear && tabRadial) {
-      if (this.type === "linear") {
-        tabLinear.classList.add("active");
-        tabRadial.classList.remove("active");
-      } else {
-        tabRadial.classList.add("active");
-        tabLinear.classList.remove("active");
-      }
-    }
     const linearDist = document.getElementById("cg-linear-distribution");
     const coordsDisplay = document.getElementById("cg-coords-display");
     if (linearDist) linearDist.style.display = this.type === "linear" ? "flex" : "none";
@@ -737,15 +713,18 @@ export class GradientService {
     }
 
     const { layerManager, textTransform, onApply } = this.options;
-    let targetLayer: Layer | null = textTransform ? textTransform.selectedLayer : null;
-    if (!targetLayer || targetLayer.id === 0) {
+    let targetLayer: Layer | null = this.options.targetLayer !== undefined
+      ? this.options.targetLayer
+      : (textTransform ? textTransform.selectedLayer : null);
+
+    if (!targetLayer) {
       if (layerManager) {
         const active = layerManager.getActiveLayer();
         if (active && active.id !== 0) targetLayer = active;
       }
     }
 
-    if (targetLayer && targetLayer.type === "text") {
+    if (targetLayer && targetLayer.type === "text" && targetLayer.id !== 0) {
       targetLayer.fontColor = {
         kind: "custom",
         data: JSON.parse(JSON.stringify(gradData)),
@@ -767,7 +746,12 @@ export class GradientService {
           kind: "custom",
           data: gradData,
         });
+        ColorModule.lastBackground = {
+          kind: "custom",
+          data: gradData,
+        };
         layerManager.render();
+        eventBus.emit("background:changed", ColorModule.lastBackground);
       }
     }
 

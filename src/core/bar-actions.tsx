@@ -291,7 +291,7 @@ export class BarActions {
     const snapshot = this.serializeCurrentState();
     const project: ProjectData = {
       version: "1.0.0",
-      name: "Typorig Project",
+      name: "Pixorig Project",
       width: snapshot.width,
       height: snapshot.height,
       activeLayerId: snapshot.activeLayerId,
@@ -409,7 +409,7 @@ export class BarActions {
         } else if (item.action === "more-shortcuts") {
           this.openShortcutsModal();
         } else if (item.action === "more-github") {
-          window.open("https://github.com/Typorig/typorig.github.io", "_blank");
+          window.open("https://github.com/Pixorig/Pixorig", "_blank");
         } else if (item.action === "more-about") {
           this.openAboutModal();
         }
@@ -568,7 +568,7 @@ export class BarActions {
     const content = (
       <div style={{ textAlign: "center", padding: "12px 0" }}>
         <h2 style={{ fontSize: "22px", margin: "0 0 6px", color: "#fff" }}>
-          Typorig
+          Pixorig
         </h2>
         <p style={{ color: "#aaa", margin: "0 0 16px", fontSize: "13px" }}>
           Modern Browser-based Image & Typography Editor
@@ -582,7 +582,7 @@ export class BarActions {
             textAlign: "left",
           }}
         >
-          Typorig is designed to deliver fast, local-first image and typography
+          Pixorig is designed to deliver fast, local-first image and typography
           manipulation with stacked canvas layers, real DOM rendering, and WASM
           filters.
         </p>
@@ -608,13 +608,13 @@ export class BarActions {
           </p>
         </div>
         <p style={{ color: "#888", fontSize: "13px", margin: "0" }}>
-          Have fun creating with Typorig! :)
+          Have fun creating with Pixorig! :)
         </p>
       </div>
     ) as HTMLElement;
 
     showPopup({
-      title: "About Typorig",
+      title: "About Pixorig",
       width: "420px",
       content,
     });

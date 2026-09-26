@@ -6,6 +6,7 @@
 
 import { h } from "../ui/jsx";
 import { SliderControl } from "../ui/SliderControl";
+import { TabBar } from "../ui/TabBar";
 import { LayerManager, Layer } from "../core/layer";
 import { TextTransform, TextBounds } from "../text/text-transform";
 import { ColorModule } from "./color";
@@ -87,55 +88,6 @@ export class ItemBackgroundModule {
 
     panelEl.appendChild(backBtn);
 
-    // Tabs: Color | Image
-    const renderTabs = (activeTab: "color" | "image") => {
-      const tabsDiv = (
-        <div
-          style={{
-            display: "flex",
-            gap: "0",
-            borderRadius: "6px",
-            overflow: "hidden",
-            border: "1px solid #444",
-          }}
-        >
-          <button
-            type="button"
-            style={{
-              flex: "1",
-              padding: "6px 0",
-              background: activeTab === "color" ? "#00f260" : "#2a2a2a",
-              color: activeTab === "color" ? "#000" : "#fff",
-              border: "none",
-              cursor: "pointer",
-              fontSize: "12px",
-              fontWeight: "bold",
-            }}
-            onClick={() => renderContent("color")}
-          >
-            Color
-          </button>
-          <button
-            type="button"
-            style={{
-              flex: "1",
-              padding: "6px 0",
-              background: activeTab === "image" ? "#00f260" : "#2a2a2a",
-              color: activeTab === "image" ? "#000" : "#fff",
-              border: "none",
-              cursor: "pointer",
-              fontSize: "12px",
-              fontWeight: "bold",
-            }}
-            onClick={() => renderContent("image")}
-          >
-            Image
-          </button>
-        </div>
-      ) as HTMLElement;
-      return tabsDiv;
-    };
-
     const contentContainer = (
       <div class="item-bg-content"></div>
     ) as HTMLElement;
@@ -147,19 +99,21 @@ export class ItemBackgroundModule {
       } else {
         contentContainer.appendChild(this.renderImageContent(containerGroup));
       }
-      // Re-render tabs
-      const tabsEl = panelEl.querySelector(".item-bg-tabs");
-      if (tabsEl) {
-        const newTabs = renderTabs(tab);
-        newTabs.classList.add("item-bg-tabs");
-        tabsEl.replaceWith(newTabs);
-      }
     };
 
-    const initialTabs = renderTabs(currentTab);
-    initialTabs.classList.add("item-bg-tabs");
-    panelEl.appendChild(initialTabs);
+    // Tabs: Color | Image
+    const tabBarEl = TabBar({
+      tabs: [
+        { id: "color", label: "Color" },
+        { id: "image", label: "Image" },
+      ],
+      active: currentTab,
+      onChange: (id) => renderContent(id as "color" | "image"),
+    });
+
+    panelEl.appendChild(tabBarEl);
     panelEl.appendChild(contentContainer);
+    renderContent(currentTab);
 
     // Padding sliders + Radius
     panelEl.appendChild(this.renderPaddingAndRadius(containerGroup));

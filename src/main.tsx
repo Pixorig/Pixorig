@@ -1,4 +1,4 @@
-import { LayerManager } from "./core/layer";
+import { LayerManager, Layer } from "./core/layer";
 import { TextTransform } from "./text/text-transform";
 import { TextHandler } from "./text/text";
 import { createLayerListPanel } from "./ui/LayerList";
@@ -11,11 +11,12 @@ import { CurveModule } from "./modules/curve";
 import { TextureModule } from "./modules/texture";
 import { GradientModule } from "./modules/gradient";
 import { BackgroundSubpanel } from "./modules/background-subpanel";
+import { CutoutModule } from "./modules/cutout";
 import { BarActions } from "./core/bar-actions";
 import { eventBus } from "./core/event-bus";
 import { showDropdown } from "./ui/Popup";
 
-console.log("[Typorig] Initialized full app with Vite + TS/TSX");
+console.log("[Pixorig] Initialized full app with Vite + TS/TSX");
 
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 const dropzone = document.getElementById("dropzone") as HTMLElement;
@@ -31,10 +32,12 @@ if (canvas) {
   const backgroundSubpanel = new BackgroundSubpanel({ layerManager });
 
   // Gradient custom popup listener
-  eventBus.on("gradient:open-custom", () => {
+  eventBus.on("gradient:open-custom", (payload?: { targetLayer?: Layer; onApply?: (data: any) => void }) => {
     GradientModule.open({
       layerManager,
       textTransform,
+      targetLayer: payload?.targetLayer,
+      onApply: payload?.onApply,
     });
   });
 
@@ -189,7 +192,7 @@ if (canvas) {
               const dataUrl = canvas.toDataURL(mime);
               const a = document.createElement("a");
               a.href = dataUrl;
-              a.download = `typorig-export-${Date.now()}.${ext}`;
+              a.download = `pixorig-export-${Date.now()}.${ext}`;
               a.click();
             }
           },
@@ -237,8 +240,10 @@ if (canvas) {
       });
     } else if (subType === "bg-color") {
       const subSidebar = document.getElementById("sub-sidebar");
+      const bgLayer = layerManager.getBackgroundLayer();
       ColorModule.open(subSidebar, {
         layerManager,
+        targetLayer: bgLayer,
       });
     } else if (subType === "bg-from-camera") {
       backgroundSubpanel.openCamera();
@@ -248,6 +253,11 @@ if (canvas) {
       backgroundSubpanel.openSizePanel();
     } else if (subType === "bg-transparent") {
       backgroundSubpanel.openTransparent();
+    } else if (subType === "img-cutout") {
+      const imgGroup = document.querySelector('.sub-group[data-section="image"]') as HTMLElement;
+      if (imgGroup) {
+        CutoutModule.open(imgGroup, { layerManager });
+      }
     }
   });
 
@@ -327,4 +337,19 @@ if (canvas) {
   }
 
   initDefaultCanvas();
+
+  const announcement = document.getElementById("rename-announcement-modal");
+  const closeAnnouncement = () => {
+    if (announcement) announcement.style.display = "none";
+  };
+
+  document
+    .getElementById("close-announcement-btn")
+    ?.addEventListener("click", closeAnnouncement);
+  document
+    .getElementById("dismiss-announcement-btn")
+    ?.addEventListener("click", closeAnnouncement);
+  announcement?.addEventListener("click", (event) => {
+    if (event.target === announcement) closeAnnouncement();
+  });
 }
