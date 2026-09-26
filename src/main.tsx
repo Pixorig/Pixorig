@@ -337,19 +337,4 @@ if (canvas) {
   }
 
   initDefaultCanvas();
-
-  const announcement = document.getElementById("rename-announcement-modal");
-  const closeAnnouncement = () => {
-    if (announcement) announcement.style.display = "none";
-  };
-
-  document
-    .getElementById("close-announcement-btn")
-    ?.addEventListener("click", closeAnnouncement);
-  document
-    .getElementById("dismiss-announcement-btn")
-    ?.addEventListener("click", closeAnnouncement);
-  announcement?.addEventListener("click", (event) => {
-    if (event.target === announcement) closeAnnouncement();
-  });
 }
