@@ -1,4 +1,4 @@
-name: Deploy to GitHub Pages
+name: Build and Deploy to Pixorig Pages
 
 on:
   push:
@@ -7,18 +7,16 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: "pages"
-  cancel-in-progress: false
+  group: "deploy-pixorig-pages"
+  cancel-in-progress: true
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout source code
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -33,18 +31,40 @@ jobs:
       - name: Build project
         run: npm run build
 
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./dist
+      - name: Publish build to Pixorig/pixorig.github.io
+        env:
+          DEPLOY_TOKEN: ${{ secrets.PIXORIG_PAGES_DEPLOY_TOKEN }}
+          TARGET_REPOSITORY: Pixorig/pixorig.github.io
+          TARGET_BRANCH: main
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$DEPLOY_TOKEN" ]; then
+            echo "::error::Missing Actions secret PIXORIG_PAGES_DEPLOY_TOKEN."
+            exit 1
+          fi
 
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          git clone "https://x-access-token:${DEPLOY_TOKEN}@github.com/${TARGET_REPOSITORY}.git" pages
+          cd pages
+
+          if git ls-remote --exit-code origin "refs/heads/${TARGET_BRANCH}"; then
+            git fetch origin "$TARGET_BRANCH"
+            git checkout -B "$TARGET_BRANCH" "origin/$TARGET_BRANCH"
+          else
+            git checkout --orphan "$TARGET_BRANCH"
+          fi
+
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a ../dist/. .
+          touch .nojekyll
+
+          git config user.name "pixorig-deploy[bot]"
+          git config user.email "pixorig-deploy[bot]@users.noreply.github.com"
+          git add --all
+
+          if git diff --cached --quiet; then
+            echo "No deployment changes to publish."
+            exit 0
+          fi
+
+          git commit -m "Deploy Pixorig build from ${SOURCE_SHA}"
+          git push origin "HEAD:${TARGET_BRANCH}"
