@@ -4,6 +4,7 @@
  */
 
 import { h } from "../ui/jsx";
+import { PanelHeader } from "../ui/PanelHeader";
 import { eventBus } from "../core/event-bus";
 import { Layer, LayerManager } from "../core/layer";
 
@@ -37,32 +38,29 @@ export const RelativePositionModule = {
   ): void {
     if (!containerGroup) return;
 
+    const { onClose, layerManager } = options;
+
+    let targetLayer = options.targetLayer;
+    if (!targetLayer && layerManager) {
+      targetLayer = layerManager.getActiveLayer();
+      if (targetLayer && targetLayer.id === 0) targetLayer = undefined;
+    }
+
     if (!containerGroup.querySelector(".relative-position-panel")) {
       savedInnerHTML = containerGroup.innerHTML;
     }
 
-    const { onClose } = options;
-
-    const backBtn = (
-      <button
-        type="button"
-        id="rel-pos-back-btn"
-        class="sub-item"
-        style={{ marginBottom: "4px" }}
-        onClick={() => {
-          this.close(containerGroup);
-          if (onClose) onClose();
-        }}
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18">
-          <path
-            fill="currentColor"
-            d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"
-          />
-        </svg>
-        <span>Back</span>
-      </button>
-    );
+    // Panel này chỉ là các nút align hành động một lần (kéo-thả theo căn)
+    // nên không có nút Reset — tránh bấm nhầm liên tiếp gây hiệu ứng khó lường.
+    const header = PanelHeader({
+      title: "Relative Position",
+      showReset: false,
+      onBack: () => {
+        this.close(containerGroup);
+        if (onClose) onClose();
+      },
+      onReset: () => {},
+    });
 
     const btnStyle = {
       flex: "1",
@@ -88,7 +86,7 @@ export const RelativePositionModule = {
           padding: "12px 8px",
         }}
       >
-        {backBtn}
+        {header}
 
         <label style={{ fontSize: "11px", color: "#999", display: "block" }}>
           Horizontal Alignment

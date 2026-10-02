@@ -36,11 +36,23 @@ html, body {
 .topbar-brand {
   font-size: 14px;
   font-weight: 700;
-  color: #ccc;
+  color: #00f260;
+  background: linear-gradient(135deg, #00f260, #0575e6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
   letter-spacing: 0.3px;
   padding-right: 12px;
   border-right: 1px solid #444;
   user-select: none;
+  cursor: pointer;
+}
+
+.topbar-brand:hover {
+  background: linear-gradient(135deg, #fc5c7d, #6a82fb);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .topbar-actions {
@@ -138,7 +150,7 @@ html, body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 44px;
+  width: 48px;
   height: 48px;
   border: none;
   border-radius: 6px;
@@ -147,9 +159,14 @@ html, body {
   cursor: pointer;
   transition: all 0.15s;
   gap: 2px;
-  font-size: 8px;
+  font-size: 7px;
   text-transform: uppercase;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.2px;
+  word-wrap: break-word;
+  text-align: center;
+  line-height: 1.1;
+  padding: 2px;
+  overflow: hidden;
 }
 
 .sidebar-section:hover {

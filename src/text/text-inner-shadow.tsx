@@ -1,8 +1,10 @@
 import { h } from "../ui/jsx";
+import { PanelHeader } from "../ui/PanelHeader";
 import { SliderControl } from "../ui/SliderControl";
 import { LayerManager, Layer } from "../core/layer";
 import { TextTransform } from "./text-transform";
 import { ColorModule } from "../modules/color";
+import { captureSnapshot, getSnapshot } from "../core/panel-state-store";
 
 export class TextInnerShadowModule {
   private layerManager: LayerManager;
@@ -39,6 +41,17 @@ export class TextInnerShadowModule {
 
     const layer = this.getTargetLayer();
 
+    // Ghi mốc THAM SỐ LÚC MỞ PANEL (giống Shadow): blur, offset X/Y.
+    // Reset phục hồi các giá trị này — KHÔNG tắt hiệu ứng, KHÔNG đụng màu
+    // (màu có nút xóa riêng trong color row).
+    if (layer) {
+      captureSnapshot("inner-shadow", layer.id, {
+        innerShadowBlur: layer.innerShadowBlur ?? 5,
+        innerShadowOffsetX: layer.innerShadowOffsetX ?? 0,
+        innerShadowOffsetY: layer.innerShadowOffsetY ?? 4,
+      });
+    }
+
     const panelEl = (
       <div
         class="inner-shadow-panel"
@@ -53,22 +66,24 @@ export class TextInnerShadowModule {
     ) as HTMLElement;
 
     // Back button
-    const backBtn = (
-      <button
-        type="button"
-        class="sub-item"
-        style={{ marginBottom: "4px" }}
-        onClick={() => this.close(containerGroup)}
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18">
-          <path
-            fill="currentColor"
-            d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"
-          />
-        </svg>
-        <span>Back</span>
-      </button>
-    );
+    // Reset = phục hồi THAM SỐ về mốc lúc mở panel gần nhất (giống Shadow):
+    // blur, offset X/Y. Không tắt hiệu ứng, không đụng màu.
+    const backBtn = PanelHeader({
+      title: "Inner Shadow",
+      onBack: () => this.close(containerGroup),
+      onReset: () => {
+        const l = this.getTargetLayer();
+        if (l) {
+          const snap = getSnapshot("inner-shadow", l.id);
+          l.innerShadowBlur = snap ? Number(snap.innerShadowBlur) : 5;
+          l.innerShadowOffsetX = snap ? Number(snap.innerShadowOffsetX) : 0;
+          l.innerShadowOffsetY = snap ? Number(snap.innerShadowOffsetY) : 4;
+          this.redrawAndSync(l);
+          // Re-render để slider hiển thị lại giá trị đã reset
+          this.open(containerGroup);
+        }
+      },
+    });
     panelEl.appendChild(backBtn);
 
     // Color row: [Color][xóa]

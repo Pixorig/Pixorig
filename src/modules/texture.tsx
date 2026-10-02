@@ -4,6 +4,7 @@
  */
 
 import { h } from "../ui/jsx";
+import { PanelHeader } from "../ui/PanelHeader";
 import { SliderControl } from "../ui/SliderControl";
 import { LayerManager, Layer } from "../core/layer";
 import { TextTransform } from "../text/text-transform";
@@ -138,22 +139,21 @@ export class TextureModule {
       </button>
     );
 
-    const backBtn = (
-      <button
-        id="texture-back-btn"
-        class="sub-item"
-        style={{ marginBottom: "4px" }}
-        onClick={() => this.close(containerGroup)}
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18">
-          <path
-            fill="currentColor"
-            d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"
-          />
-        </svg>
-        <span>Back</span>
-      </button>
-    );
+    const backBtn = PanelHeader({
+      title: "Texture",
+      onBack: () => this.close(containerGroup),
+      onReset: () => {
+        const layer = this.getTargetLayer();
+        if (layer) {
+          layer.textureImage = null;
+          layer.textureScale = 1;
+          layer._textureCacheCanvas = null;
+          this.textTransform.redrawTextLayer(layer);
+          this.layerManager.render();
+          this.open(containerGroup);
+        }
+      },
+    });
 
     const sliderControlEl = SliderControl({
       label: "Scale",

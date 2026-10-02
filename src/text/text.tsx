@@ -6,8 +6,10 @@
  */
 
 import { h } from "../ui/jsx";
+import { PanelHeader } from "../ui/PanelHeader";
 import { Layer, LayerManager, TextDecoration } from "../core/layer";
 import { eventBus } from "../core/event-bus";
+import { captureSnapshot, getSnapshot } from "../core/panel-state-store";
 import { SliderControl } from "../ui/SliderControl";
 import { RelativePositionModule } from "../modules/relative-position";
 import { RotateModule } from "../modules/rotate";
@@ -28,6 +30,7 @@ import { Text3DRotateModule } from "./text-3d-rotate";
 import { Text3DModule } from "./text-3d";
 import { Text3DShadowModule } from "./text-3d-shadow";
 import { TextReflectionModule } from "./text-reflection";
+import { TextFontModule } from "./text-font";
 import { TextTransform } from "./text-transform";
 
 export interface TextStyleOptions {
@@ -113,6 +116,8 @@ export class TextDataService {
     }
     this.layerManager.render();
     eventBus.emit("layer:changed", this.layerManager.getLayersList());
+    // Nội dung text đổi => các mốc snapshot cũ không còn đúng
+    eventBus.emit("text:content-changed", { layerId: textLayer.id });
   }
 
   /**
@@ -182,6 +187,7 @@ export class TextUIController {
   private text3DModule: Text3DModule | null = null;
   private text3DShadowModule: Text3DShadowModule | null = null;
   private textReflectionModule: TextReflectionModule | null = null;
+  private textFontModule: TextFontModule | null = null;
 
   constructor(
     layerManager: LayerManager,
@@ -207,6 +213,7 @@ export class TextUIController {
       this.text3DModule = new Text3DModule(layerManager, textTransform);
       this.text3DShadowModule = new Text3DShadowModule(layerManager, textTransform);
       this.textReflectionModule = new TextReflectionModule(layerManager, textTransform);
+      this.textFontModule = new TextFontModule(layerManager, textTransform);
     }
     this.initEventListeners();
     this.initEventBus();
@@ -229,6 +236,7 @@ export class TextUIController {
     this.text3DModule = new Text3DModule(this.layerManager, textTransform);
     this.text3DShadowModule = new Text3DShadowModule(this.layerManager, textTransform);
     this.textReflectionModule = new TextReflectionModule(this.layerManager, textTransform);
+    this.textFontModule = new TextFontModule(this.layerManager, textTransform);
   }
 
   private initEventListeners(): void {
@@ -290,6 +298,22 @@ export class TextUIController {
   }
 
   handlePropertyClick(propType: string): void {
+    // Lưu HTML gốc của props list đúng MỘT lần, trước khi panel nào ghi đè lên nó.
+    // (Trước đây mỗi openXxxPanel() tự lưu, dẫn đến lưu nhầm HTML của panel khác
+    //  và nút Back của panel này trả về panel kia.)
+    const textPropsGroup = document.querySelector(
+      '.sub-group[data-section="text-props"]'
+    ) as HTMLElement | null;
+    if (
+      textPropsGroup &&
+      !textPropsGroup.dataset._savedInner &&
+      !textPropsGroup.querySelector(
+        ".size-panel, .padding-panel, .style-panel, .relative-position-panel, .opacity-panel, .rotate-panel, .color-panel, .item-bg-panel"
+      )
+    ) {
+      textPropsGroup.dataset._savedInner = textPropsGroup.innerHTML;
+    }
+
     switch (propType) {
       case "relative-position":
         this.openRelativePositionPanel();
@@ -357,6 +381,9 @@ export class TextUIController {
       case "reflection":
         this.openReflectionPanel();
         break;
+      case "font":
+        this.openFontPanel();
+        break;
     }
   }
 
@@ -380,6 +407,18 @@ export class TextUIController {
     this.layerManager.render();
     if (this.textTransform && this.textTransform.selectedLayer === target) {
       this.textTransform.drawSelectionOverlay(target);
+    }
+  }
+
+  /**
+   * Quay về danh sách property (props list) từ bất kỳ panel nào.
+   * Dùng _savedInner đã lưu một lần duy nhất trong handlePropertyClick —
+   * luôn là menu gốc, không bao giờ là HTML của panel khác.
+   */
+  restorePropsList(textPropsGroup: HTMLElement): void {
+    if (textPropsGroup.dataset._savedInner) {
+      textPropsGroup.innerHTML = textPropsGroup.dataset._savedInner;
+      // Giữ lại _savedInner (không delete) để Back từ panel khác vẫn về đúng menu gốc.
     }
   }
 
@@ -409,6 +448,11 @@ export class TextUIController {
     const targetLayer = this.getActiveTextLayer();
     const currentSize = targetLayer?.fontSize ? Math.round(targetLayer.fontSize) : 48;
 
+    // Ghi mốc mỗi lần mở panel — Reset luôn về giá trị lúc mở gần nhất
+    if (targetLayer) {
+      captureSnapshot("text-size", targetLayer.id, { fontSize: currentSize });
+    }
+
     const panelEl = (
       <div
         class="size-panel"
@@ -422,46 +466,51 @@ export class TextUIController {
       ></div>
     ) as HTMLElement;
 
-    const backBtn = (
-      <button
-        type="button"
-        id="size-back-btn"
-        class="sub-item"
-        style={{ marginBottom: "4px" }}
-        onClick={() => {
-          if (textPropsGroup.dataset._savedInner) {
-            textPropsGroup.innerHTML = textPropsGroup.dataset._savedInner;
-            delete textPropsGroup.dataset._savedInner;
+    let sliderControlEl: HTMLElement | null = null;
+    const replaceSliderControl = (value: number): void => {
+      const nextSliderControlEl = SliderControl({
+        label: "Size",
+        value,
+        min: 1,
+        max: 1000,
+        sliderMin: 2,
+        sliderMax: 300,
+        btnStep: 1,
+        onChange: (newSize) => {
+          const active = this.getActiveTextLayer();
+          if (active) {
+            active.fontSize = newSize;
+            this.redrawAndSync(active);
           }
-        }}
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M19 12H5" />
-          <path d="M11 18l-6-6 6-6" />
-        </svg>
-        <span>Back</span>
-      </button>
-    );
-    panelEl.appendChild(backBtn);
+        },
+      });
 
-    const sliderControlEl = SliderControl({
-      label: "Size",
-      value: currentSize,
-      min: 1,
-      max: 1000,
-      sliderMin: 2,
-      sliderMax: 300,
-      btnStep: 1,
-      onChange: (newSize) => {
+      if (sliderControlEl?.parentNode) {
+        sliderControlEl.replaceWith(nextSliderControlEl);
+      }
+      sliderControlEl = nextSliderControlEl;
+    };
+
+    const backBtn = PanelHeader({
+      title: "Text Size",
+      onBack: () => {
+        this.restorePropsList(textPropsGroup);
+      },
+      onReset: () => {
         const active = this.getActiveTextLayer();
         if (active) {
-          active.fontSize = newSize;
+          const snap = getSnapshot("text-size", active.id);
+          const resetVal = snap ? Number(snap.fontSize) : 48;
+          active.fontSize = resetVal;
           this.redrawAndSync(active);
+          replaceSliderControl(resetVal);
         }
       },
     });
+    panelEl.appendChild(backBtn);
 
-    panelEl.appendChild(sliderControlEl);
+    replaceSliderControl(currentSize);
+    if (sliderControlEl) panelEl.appendChild(sliderControlEl);
     textPropsGroup.innerHTML = "";
     textPropsGroup.appendChild(panelEl);
   }
@@ -480,6 +529,14 @@ export class TextUIController {
     const currentLeft = targetLayer?.paddingLeft ? Math.round(targetLayer.paddingLeft) : 0;
     const currentRight = targetLayer?.paddingRight ? Math.round(targetLayer.paddingRight) : 0;
 
+    // Ghi mốc mỗi lần mở panel — Reset luôn về giá trị lúc mở gần nhất
+    if (targetLayer) {
+      captureSnapshot("padding", targetLayer.id, {
+        paddingLeft: currentLeft,
+        paddingRight: currentRight,
+      });
+    }
+
     const panelEl = (
       <div
         class="padding-panel"
@@ -493,26 +550,57 @@ export class TextUIController {
       ></div>
     ) as HTMLElement;
 
-    const backBtn = (
-      <button
-        type="button"
-        id="padding-back-btn"
-        class="sub-item"
-        style={{ marginBottom: "4px" }}
-        onClick={() => {
-          if (textPropsGroup.dataset._savedInner) {
-            textPropsGroup.innerHTML = textPropsGroup.dataset._savedInner;
-            delete textPropsGroup.dataset._savedInner;
-          }
-        }}
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M19 12H5" />
-          <path d="M11 18l-6-6 6-6" />
-        </svg>
-        <span>Back</span>
-      </button>
-    );
+    let leftSliderEl: HTMLElement | null = null;
+    let rightSliderEl: HTMLElement | null = null;
+
+    const buildSliders = (left: number, right: number): void => {
+      const newLeft = SliderControl({
+        label: "left padding",
+        value: left,
+        min: -1000,
+        max: 1000,
+        sliderMin: -20,
+        sliderMax: 100,
+        btnStep: 1,
+        onChange: (val) => updatePadding("left", val),
+      });
+      const newRight = SliderControl({
+        label: "right padding",
+        value: right,
+        min: -1000,
+        max: 1000,
+        sliderMin: -20,
+        sliderMax: 100,
+        btnStep: 1,
+        onChange: (val) => updatePadding("right", val),
+      });
+      leftSliderEl?.replaceWith(newLeft);
+      rightSliderEl?.replaceWith(newRight);
+      leftSliderEl = newLeft;
+      rightSliderEl = newRight;
+    };
+
+    const backBtn = PanelHeader({
+      title: "Text Padding",
+      onBack: () => {
+        this.restorePropsList(textPropsGroup);
+      },
+      onReset: () => {
+        const active = this.getActiveTextLayer();
+        if (active) {
+          const snap = getSnapshot("padding", active.id);
+          const resetLeft = snap ? Number(snap.paddingLeft) : 0;
+          const resetRight = snap ? Number(snap.paddingRight) : 0;
+          active.paddingLeft = resetLeft;
+          active.paddingRight = resetRight;
+          this.redrawAndSync(active);
+          buildSliders(resetLeft, resetRight);
+          // gắn lại vào DOM nếu chưa có cha
+          if (leftSliderEl && !leftSliderEl.parentNode) panelEl.appendChild(leftSliderEl);
+          if (rightSliderEl && !rightSliderEl.parentNode) panelEl.appendChild(rightSliderEl);
+        }
+      },
+    });
     panelEl.appendChild(backBtn);
 
     const updatePadding = (side: "left" | "right", val: number) => {
@@ -524,30 +612,9 @@ export class TextUIController {
       }
     };
 
-    const leftSliderEl = SliderControl({
-      label: "left padding",
-      value: currentLeft,
-      min: -1000,
-      max: 1000,
-      sliderMin: -20,
-      sliderMax: 100,
-      btnStep: 1,
-      onChange: (val) => updatePadding("left", val),
-    });
-
-    const rightSliderEl = SliderControl({
-      label: "right padding",
-      value: currentRight,
-      min: -1000,
-      max: 1000,
-      sliderMin: -20,
-      sliderMax: 100,
-      btnStep: 1,
-      onChange: (val) => updatePadding("right", val),
-    });
-
-    panelEl.appendChild(leftSliderEl);
-    panelEl.appendChild(rightSliderEl);
+    buildSliders(currentLeft, currentRight);
+    if (leftSliderEl) panelEl.appendChild(leftSliderEl);
+    if (rightSliderEl) panelEl.appendChild(rightSliderEl);
     textPropsGroup.innerHTML = "";
     textPropsGroup.appendChild(panelEl);
   }
@@ -727,15 +794,20 @@ export class TextUIController {
     }
   }
 
+  private openFontPanel(): void {
+    const textPropsGroup = document.querySelector(
+      '.sub-group[data-section="text-props"]'
+    ) as HTMLElement | null;
+    if (textPropsGroup && this.textFontModule) {
+      this.textFontModule.open(textPropsGroup);
+    }
+  }
+
   openStylePanel(): void {
     const textPropsGroup = document.querySelector(
       '.sub-group[data-section="text-props"]'
     ) as HTMLElement | null;
     if (!textPropsGroup) return;
-
-    if (!textPropsGroup.querySelector(".style-panel")) {
-      textPropsGroup.dataset._savedInner = textPropsGroup.innerHTML;
-    }
 
     const targetLayer = this.getActiveTextLayer();
     const isBold = targetLayer?.fontWeight === "bold";
@@ -756,26 +828,23 @@ export class TextUIController {
       ></div>
     ) as HTMLElement;
 
-    const backBtn = (
-      <button
-        type="button"
-        id="style-back-btn"
-        class="sub-item"
-        style={{ marginBottom: "4px" }}
-        onClick={() => {
-          if (textPropsGroup.dataset._savedInner) {
-            textPropsGroup.innerHTML = textPropsGroup.dataset._savedInner;
-            delete textPropsGroup.dataset._savedInner;
-          }
-        }}
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M19 12H5" />
-          <path d="M11 18l-6-6 6-6" />
-        </svg>
-        <span>Back</span>
-      </button>
-    );
+    const backBtn = PanelHeader({
+      title: "Text Style",
+      onBack: () => {
+        this.restorePropsList(textPropsGroup);
+      },
+      onReset: () => {
+        const active = this.getActiveTextLayer();
+        if (active) {
+          active.fontWeight = "normal";
+          active.fontStyle = "normal";
+          active.textDecoration = "none";
+          active.underline = false;
+          this.redrawAndSync(active);
+          this.openStylePanel();
+        }
+      },
+    });
     panelEl.appendChild(backBtn);
 
     const btnGrid = (

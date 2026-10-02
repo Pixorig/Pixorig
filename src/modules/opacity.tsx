@@ -4,9 +4,11 @@
  */
 
 import { h } from "../ui/jsx";
+import { PanelHeader } from "../ui/PanelHeader";
 import { SliderControl } from "../ui/SliderControl";
 import { eventBus } from "../core/event-bus";
 import { Layer, LayerManager } from "../core/layer";
+import { captureSnapshot, getSnapshot } from "../core/panel-state-store";
 
 export interface OpacityModuleOptions {
   layerManager?: LayerManager;
@@ -26,10 +28,6 @@ export const OpacityModule = {
   open(containerGroup: HTMLElement | null, options: OpacityModuleOptions = {}): void {
     if (!containerGroup) return;
 
-    if (!containerGroup.querySelector(".opacity-panel")) {
-      savedInnerHTML = containerGroup.innerHTML;
-    }
-
     const { layerManager, onOpacityChange, onClose } = options;
 
     let targetLayer = options.targetLayer;
@@ -45,26 +43,39 @@ export const OpacityModule = {
         ? Math.round(targetLayer.opacity * 100)
         : 100;
 
-    const backBtn = (
-      <button
-        type="button"
-        id="opacity-back-btn"
-        class="sub-item"
-        style={{ marginBottom: "4px" }}
-        onClick={() => {
-          this.close(containerGroup);
-          if (onClose) onClose();
-        }}
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18">
-          <path
-            fill="currentColor"
-            d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"
-          />
-        </svg>
-        <span>Back</span>
-      </button>
-    );
+    if (!containerGroup.querySelector(".opacity-panel")) {
+      savedInnerHTML = containerGroup.innerHTML;
+    }
+    // Ghi mốc opacity LÚC MỞ PANEL (giống Size/Padding):
+    // Reset luôn về giá trị tại lần mở gần nhất, không phải mặc định 100%.
+    // this.open() sau Reset là re-render (đã có .opacity-panel) nên KHÔNG ghi đè mốc.
+    if (targetLayer) {
+      captureSnapshot("opacity", targetLayer.id, { opacity: currentOpacity });
+    }
+
+    const backBtn = PanelHeader({
+      title: "Opacity",
+      onBack: () => {
+        this.close(containerGroup);
+        if (onClose) onClose();
+      },
+      onReset: () => {
+        let active = targetLayer;
+        if (!active && layerManager) {
+          active = layerManager.getActiveLayer();
+        }
+        if (active && active.id !== 0) {
+          const snap = getSnapshot("opacity", active.id);
+          const resetPercent = snap ? Number(snap.opacity) : 100;
+          const normalized = Math.max(0, Math.min(1, resetPercent / 100));
+          active.setOpacity(normalized);
+          if (layerManager) layerManager.render();
+          eventBus.emit("layer:opacity-changed", { layer: active, opacity: normalized });
+          if (onOpacityChange) onOpacityChange(normalized);
+        }
+        this.open(containerGroup, options);
+      },
+    });
 
     const sliderControlEl = SliderControl({
       label: "Opacity",

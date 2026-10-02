@@ -4,11 +4,13 @@
  */
 
 import { h } from "../ui/jsx";
+import { PanelHeader } from "../ui/PanelHeader";
 import { SliderControl } from "../ui/SliderControl";
 import { TabBar } from "../ui/TabBar";
 import { LayerManager, Layer } from "../core/layer";
 import { TextTransform } from "./text-transform";
 import { ColorModule } from "../modules/color";
+import { captureSnapshot, getSnapshot } from "../core/panel-state-store";
 
 export class TextStrokeModule {
   private layerManager: LayerManager;
@@ -47,6 +49,20 @@ export class TextStrokeModule {
     const currentTab: "color" | "image" = "color";
     const currentWidth = layer?.strokeWidth ?? 0;
 
+    if (!containerGroup.querySelector(".stroke-panel")) {
+      containerGroup.dataset._savedInner = containerGroup.innerHTML;
+    }
+    // Ghi mốc width + loại fill viền LÚC MỞ PANEL (giống Size/Padding):
+    // Reset phục hồi về giá trị lúc mở gần nhất, không ép về 0/đen.
+    // Store chỉ nhận primitive nên màu/ảnh lưu dạng ID tham chiếu:
+    // "none" = không viền, "color" = dùng strokeColor hiện tại, "image" = strokeImage.
+    if (layer) {
+      captureSnapshot("stroke", layer.id, {
+        strokeWidth: currentWidth,
+        strokeFillKind: layer.strokeImage ? "image" : layer.strokeColor ? "color" : "none",
+      });
+    }
+
     const panelEl = (
       <div
         class="stroke-panel"
@@ -61,22 +77,32 @@ export class TextStrokeModule {
     ) as HTMLElement;
 
     // Back button
-    const backBtn = (
-      <button
-        type="button"
-        class="sub-item"
-        style={{ marginBottom: "4px" }}
-        onClick={() => this.close(containerGroup)}
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18">
-          <path
-            fill="currentColor"
-            d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"
-          />
-        </svg>
-        <span>Back</span>
-      </button>
-    );
+    const backBtn = PanelHeader({
+      title: "Stroke",
+      onBack: () => this.close(containerGroup),
+      onReset: () => {
+        const l = this.getTargetLayer();
+        if (l) {
+          const snap = getSnapshot("stroke", l.id);
+          l.strokeWidth = snap ? Number(snap.strokeWidth) : 0;
+          // Fill viền lưu dạng ID tham chiếu (xem comment ở captureSnapshot)
+          if (snap) {
+            const kind = String(snap.strokeFillKind);
+            if (kind === "none") {
+              l.strokeColor = null;
+              l.strokeImage = null;
+            } else if (kind === "image" && !l.strokeImage) {
+              // Ảnh đã bị thay bằng màu → không thể tái tạo ảnh, fallback: tắt fill
+              l.strokeColor = null;
+            }
+            // "color"/"image" giữ nguyên strokeColor/strokeImage hiện tại
+          }
+          this.redrawAndSync(l);
+          // Re-render để slider hiển thị lại giá trị đã reset
+          this.open(containerGroup);
+        }
+      },
+    });
     panelEl.appendChild(backBtn);
 
     const contentContainer = (

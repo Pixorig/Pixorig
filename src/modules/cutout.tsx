@@ -4,6 +4,7 @@
  */
 
 import { h } from "../ui/jsx";
+import { PanelHeader } from "../ui/PanelHeader";
 import { TabBar } from "../ui/TabBar";
 import { LayerManager } from "../core/layer";
 
@@ -34,51 +35,14 @@ export class CutoutModule {
       ) as HTMLElement;
 
       // 1. Header (Back button + Title)
-      const headerRow = (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
-            paddingBottom: "8px",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <button
-              type="button"
-              class="btn-back-cutout"
-              style={{
-                background: "transparent",
-                border: "none",
-                color: "#fff",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                padding: "4px",
-              }}
-              title="Quay lại"
-              onClick={() => this.close(container)}
-            >
-              <svg
-                viewBox="0 0 24 24"
-                width="18"
-                height="18"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <polyline points="15 18 9 12 15 6" />
-              </svg>
-            </button>
-            <span style={{ fontWeight: "600", fontSize: "14px", color: "#fff" }}>
-              Cutout
-            </span>
-          </div>
-        </div>
-      ) as HTMLElement;
+      const headerRow = PanelHeader({
+        title: "Cutout",
+        onBack: () => this.close(container),
+        onReset: () => {
+          this.activeTab = "auto";
+          render();
+        },
+      });
       panel.appendChild(headerRow);
 
       // 2. TabBar [Auto][Manual]

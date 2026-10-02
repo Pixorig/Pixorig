@@ -1,8 +1,10 @@
 import { h } from "../ui/jsx";
+import { PanelHeader } from "../ui/PanelHeader";
 import { SliderControl } from "../ui/SliderControl";
 import { LayerManager, Layer } from "../core/layer";
 import { TextTransform } from "./text-transform";
 import { ColorModule } from "../modules/color";
+import { captureSnapshot, getSnapshot } from "../core/panel-state-store";
 
 export class TextShadowModule {
   private layerManager: LayerManager;
@@ -30,7 +32,7 @@ export class TextShadowModule {
     }
   }
 
-  open(containerGroup: HTMLElement): void {
+  open(containerGroup: HTMLElement, opts: { captureSnapshotValues?: boolean } = {}): void {
     if (!containerGroup) return;
 
     if (!containerGroup.querySelector(".shadow-panel")) {
@@ -38,6 +40,21 @@ export class TextShadowModule {
     }
 
     const layer = this.getTargetLayer();
+
+    // Ghi mốc THAM SỐ LÚC MỞ PANEL (giống Item Background): opacity, blur,
+    // offset X/Y và Outer glow (0/1). Reset phục hồi các giá trị này,
+    // KHÔNG tắt hiệu ứng và KHÔNG đụng màu (màu có nút xóa riêng).
+    // Chỉ ghi khi mở TỪ MENU — re-render nội bộ (toggle glow, sau Reset)
+    // KHÔNG được ghi đè mốc, nếu không Reset sẽ không về đúng mốc ban đầu.
+    if (layer && opts.captureSnapshotValues !== false) {
+      captureSnapshot("shadow", layer.id, {
+        shadowOpacity: layer.shadowOpacity ?? 0.5,
+        shadowBlur: layer.shadowBlur ?? 4,
+        shadowOffsetX: layer.shadowOffsetX ?? 0,
+        shadowOffsetY: layer.shadowOffsetY ?? 4,
+        shadowOuterGlow: layer.shadowOuterGlow ? 1 : 0,
+      });
+    }
 
     const panelEl = (
       <div
@@ -53,22 +70,28 @@ export class TextShadowModule {
     ) as HTMLElement;
 
     // Back button
-    const backBtn = (
-      <button
-        type="button"
-        class="sub-item"
-        style={{ marginBottom: "4px" }}
-        onClick={() => this.close(containerGroup)}
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18">
-          <path
-            fill="currentColor"
-            d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"
-          />
-        </svg>
-        <span>Back</span>
-      </button>
-    );
+    // Reset = phục hồi THAM SỐ về mốc lúc mở panel gần nhất (giống Size/Padding):
+    // opacity, blur, offset X/Y và công tắc Outer glow (0/1).
+    // Không tắt hiệu ứng, không đụng màu — xóa shadow dùng nút xóa riêng.
+    const backBtn = PanelHeader({
+      title: "Shadow",
+      onBack: () => this.close(containerGroup),
+      onReset: () => {
+        const l = this.getTargetLayer();
+        if (l) {
+          const snap = getSnapshot("shadow", l.id);
+          l.shadowOpacity = snap ? Number(snap.shadowOpacity) : 0.5;
+          l.shadowBlur = snap ? Number(snap.shadowBlur) : 4;
+          l.shadowOffsetX = snap ? Number(snap.shadowOffsetX) : 0;
+          l.shadowOffsetY = snap ? Number(snap.shadowOffsetY) : 4;
+          l.shadowOuterGlow = snap ? Number(snap.shadowOuterGlow) === 1 : false;
+          this.redrawAndSync(l);
+          // Re-render để slider + công tắc Outer glow hiển thị lại giá trị đã reset
+          // KHÔNG ghi lại mốc khi re-render
+          this.open(containerGroup, { captureSnapshotValues: false });
+        }
+      },
+    });
     panelEl.appendChild(backBtn);
 
     // Color row: [Select Color][Xóa]
@@ -265,8 +288,8 @@ export class TextShadowModule {
         if (!l) return;
         l.shadowOuterGlow = checkboxEl.checked;
         this.redrawAndSync(l);
-        // Re-open để cập nhật thumb position
-        this.open(containerGroup);
+        // Re-open để cập nhật thumb position — KHÔNG ghi lại mốc tham số
+        this.open(containerGroup, { captureSnapshotValues: false });
       });
     }
     panelEl.appendChild(outerGlowRow);

@@ -160,13 +160,21 @@ export class Layer {
   // Image reference nếu là background / image layer
   image?: HTMLImageElement;
 
+  // Image layer state — kích thước/góc hiển thị của ảnh
+  // (được điều khiển qua Selection Box bởi ImageTransform)
+  imageSrc: string | null = null;
+  imgWidth = 0;
+  imgHeight = 0;
+  imgRotation = 0;
+
   constructor(id: number, name: string, type: LayerType = "normal") {
     this.id = id;
     this.name = name;
     this.type = type;
     this.locked = type === "background";
     this.canvas = document.createElement("canvas");
-    this.ctx = this.canvas.getContext("2d")!;
+    // willReadFrequently: tối ưu cho các thao tác getImageData (shadow/mask/hit-test)
+    this.ctx = this.canvas.getContext("2d", { willReadFrequently: true })!;
     this.zIndex = id;
   }
 
@@ -246,6 +254,7 @@ export class LayerManager {
   layers: Layer[] = [];
   activeLayerId = 0;
   private nextLayerId = 1;
+  private _imageCount = 1;
 
   constructor(mainCanvas: HTMLCanvasElement) {
     this.mainCanvas = mainCanvas;
@@ -292,6 +301,59 @@ export class LayerManager {
 
     this.render();
     return layer;
+  }
+
+  createImageLayer(img: HTMLImageElement): Layer {
+    const canvas = this.mainCanvas;
+    const layer = this.createLayer(`Image ${this._imageCount++}`, "image");
+
+    // Đồng bộ kích thước layer canvas với main canvas
+    layer.canvas.width = canvas.width;
+    layer.canvas.height = canvas.height;
+
+    layer.image = img;
+    layer.imageSrc = img.src || null;
+
+    // Fit ảnh vào canvas (giữ nguyên tỉ lệ, không phóng to vượt canvas)
+    const fit = Math.min(
+      canvas.width / img.width,
+      canvas.height / img.height,
+      1
+    );
+    layer.imgWidth = Math.max(1, Math.round(img.width * fit));
+    layer.imgHeight = Math.max(1, Math.round(img.height * fit));
+
+    // Căn giữa canvas
+    layer.x = Math.round((canvas.width - layer.imgWidth) / 2);
+    layer.y = Math.round((canvas.height - layer.imgHeight) / 2);
+    layer.imgRotation = 0;
+
+    this.redrawImageLayer(layer);
+    this.render();
+    return layer;
+  }
+
+  /**
+   * Vẽ lại nội dung image layer theo x/y/imgWidth/imgHeight/imgRotation.
+   * Được ImageTransform gọi khi di chuyển / resize / xoay qua Selection Box.
+   */
+  redrawImageLayer(layer: Layer): void {
+    if (!layer || layer.type !== "image") return;
+    layer.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    layer.ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
+
+    const img = layer.image;
+    const w = layer.imgWidth || (img ? img.naturalWidth || img.width : 0);
+    const h = layer.imgHeight || (img ? img.naturalHeight || img.height : 0);
+    if (!img || !w || !h) return;
+
+    const cx = layer.x + w / 2;
+    const cy = layer.y + h / 2;
+    layer.ctx.save();
+    layer.ctx.translate(cx, cy);
+    layer.ctx.rotate(((layer.imgRotation || 0) * Math.PI) / 180);
+    layer.ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    layer.ctx.restore();
   }
 
   getLayer(id: number): Layer | undefined {

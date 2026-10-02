@@ -7,6 +7,7 @@
  */
 
 import { h } from "../ui/jsx";
+import { PanelHeader } from "../ui/PanelHeader";
 import { LayerManager, Layer } from "../core/layer";
 import { TextTransform, resolveEffectiveAlign } from "./text-transform";
 
@@ -69,23 +70,6 @@ export class TextAlignModule {
       ></div>
     ) as HTMLElement;
 
-    // Back Button
-    const backBtn = (
-      <button
-        type="button"
-        class="sub-item"
-        style={{ marginBottom: "4px" }}
-        onClick={() => this.close(containerGroup)}
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M19 12H5" />
-          <path d="M11 18l-6-6 6-6" />
-        </svg>
-        <span>Back</span>
-      </button>
-    );
-    panelEl.appendChild(backBtn);
-
     const applyAlign = (align: CanvasTextAlign) => {
       const target = this.getTargetLayer();
       if (!target) return;
@@ -118,6 +102,20 @@ export class TextAlignModule {
       this.redrawAndSync(target);
       this.open(containerGroup);
     };
+
+    // Back Button
+    const backBtn = PanelHeader({
+      title: "Text Align",
+      onBack: () => this.close(containerGroup),
+      onReset: () => {
+        const target = this.getTargetLayer();
+        if (target) {
+          target.textJustify = false;
+          applyAlign("left");
+        }
+      },
+    });
+    panelEl.appendChild(backBtn);
 
     const toggleJustify = () => {
       const target = this.getTargetLayer();

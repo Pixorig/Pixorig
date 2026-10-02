@@ -44,6 +44,11 @@ export interface SerializedLayerData {
   scaleX?: number;
   scaleY?: number;
   curveBend?: number;
+  // Image layer specific properties
+  imageSrc?: string | null;
+  imgWidth?: number;
+  imgHeight?: number;
+  imgRotation?: number;
 }
 
 export interface ProjectData {
@@ -139,6 +144,11 @@ export class BarActions {
         scaleX: layer.scaleX,
         scaleY: layer.scaleY,
         curveBend: layer.curveBend,
+        // Image layer state
+        imageSrc: layer.type === "image" ? layer.imageSrc : undefined,
+        imgWidth: layer.type === "image" ? layer.imgWidth : undefined,
+        imgHeight: layer.type === "image" ? layer.imgHeight : undefined,
+        imgRotation: layer.type === "image" ? layer.imgRotation : undefined,
       };
     });
 
@@ -254,6 +264,13 @@ export class BarActions {
         if (sLayer.scaleX !== undefined) layer.scaleX = sLayer.scaleX;
         if (sLayer.scaleY !== undefined) layer.scaleY = sLayer.scaleY;
         if (sLayer.curveBend !== undefined) layer.curveBend = sLayer.curveBend;
+        // Image layer state
+        if (sLayer.imageSrc !== undefined && sLayer.imageSrc !== null)
+          layer.imageSrc = sLayer.imageSrc;
+        if (sLayer.imgWidth !== undefined) layer.imgWidth = sLayer.imgWidth;
+        if (sLayer.imgHeight !== undefined) layer.imgHeight = sLayer.imgHeight;
+        if (sLayer.imgRotation !== undefined)
+          layer.imgRotation = sLayer.imgRotation;
 
         // Vẽ lại raster data nếu có
         if (sLayer.dataUrl) {
@@ -264,6 +281,20 @@ export class BarActions {
               layer.ctx.drawImage(img, 0, 0);
               if (layer.type === "background") {
                 layer.image = img;
+              }
+              if (layer.type === "image") {
+                layer.image = img;
+                if (!layer.imageSrc) layer.imageSrc = img.src;
+                // Fallback kích thước nếu snapshot cũ chưa lưu
+                if (!layer.imgWidth || !layer.imgHeight) {
+                  const fit = Math.min(
+                    snapshot.width / img.naturalWidth,
+                    snapshot.height / img.naturalHeight,
+                    1
+                  );
+                  layer.imgWidth = layer.imgWidth || Math.round(img.naturalWidth * fit);
+                  layer.imgHeight = layer.imgHeight || Math.round(img.naturalHeight * fit);
+                }
               }
               resolve();
             };

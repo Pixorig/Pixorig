@@ -2,18 +2,17 @@ import { LayerManager, Layer } from "./core/layer";
 import { TextTransform } from "./text/text-transform";
 import { TextHandler } from "./text/text";
 import { createLayerListPanel } from "./ui/LayerList";
-import { RotateModule } from "./modules/rotate";
-import { OpacityModule } from "./modules/opacity";
-import { RelativePositionModule } from "./modules/relative-position";
 import { ColorModule } from "./modules/color";
 import { CropModule } from "./modules/crop";
-import { CurveModule } from "./modules/curve";
-import { TextureModule } from "./modules/texture";
 import { GradientModule } from "./modules/gradient";
 import { BackgroundSubpanel } from "./modules/background-subpanel";
 import { CutoutModule } from "./modules/cutout";
+import { ImageUploadModule } from "./image/image-upload";
+import { ImageCameraModule } from "./image/image-camera";
 import { BarActions } from "./core/bar-actions";
+import { ImageTransform } from "./core/image-transform";
 import { eventBus } from "./core/event-bus";
+import { clearAllSnapshotsForLayer } from "./core/panel-state-store";
 import { showDropdown } from "./ui/Popup";
 
 console.log("[Pixorig] Initialized full app with Vite + TS/TSX");
@@ -26,10 +25,10 @@ if (canvas) {
   const textTransform = new TextTransform(canvas, layerManager);
   const textHandler = new TextHandler(layerManager, textTransform);
 
-  const curveModule = new CurveModule(layerManager, textTransform);
-  const textureModule = new TextureModule(layerManager, textTransform);
   const barActions = new BarActions(layerManager);
   const backgroundSubpanel = new BackgroundSubpanel({ layerManager });
+  // Selection Box / Bounding Box cho image layer (di chuyển, resize, xoay)
+  new ImageTransform(canvas, layerManager);
 
   // Gradient custom popup listener
   eventBus.on("gradient:open-custom", (payload?: { targetLayer?: Layer; onApply?: (data: any) => void }) => {
@@ -142,6 +141,11 @@ if (canvas) {
         showDropdown(btn as HTMLElement, {
           items: [
             {
+              label: "Image",
+              action: "add-image",
+              icon: '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>',
+            },
+            {
               label: "Text",
               action: "add-text",
               icon: '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M5 4v3h5.5v12h3V7H19V4H5z"/></svg>',
@@ -153,7 +157,9 @@ if (canvas) {
             },
           ],
           onItemClick: (item) => {
-            if (item.action === "add-text") {
+            if (item.action === "add-image") {
+              ImageUploadModule.open(layerManager);
+            } else if (item.action === "add-text") {
               textHandler.createNewTextLayer();
             } else if (item.action === "add-date") {
               const now = new Date().toLocaleDateString();
@@ -207,6 +213,25 @@ if (canvas) {
     });
   });
 
+  // Khi image layer được chọn → hiện image-props group
+  eventBus.on("image:selected", () => {
+    document.querySelectorAll(".sub-group").forEach((g) => g.classList.add("hidden"));
+    // Chuyển sidebar active sang image
+    document.querySelectorAll(".sidebar-section").forEach((s) => s.classList.remove("active"));
+    const imgSection = document.querySelector('.sidebar-section[data-section="image"]');
+    if (imgSection) imgSection.classList.add("active");
+    const propsGroup = document.querySelector('.sub-group[data-section="image-props"]');
+    if (propsGroup) propsGroup.classList.remove("hidden");
+  });
+
+  // Khi image layer bị deselect → quay về image group với 2 nút
+  eventBus.on("image:deselected", () => {
+    const propsGroup = document.querySelector('.sub-group[data-section="image-props"]');
+    if (propsGroup) propsGroup.classList.add("hidden");
+    const imgGroup = document.querySelector('.sub-group[data-section="image"]');
+    if (imgGroup) imgGroup.classList.remove("hidden");
+  });
+
   // Sidebar navigation
   document.querySelectorAll(".sidebar-section").forEach((sec) => {
     sec.addEventListener("click", () => {
@@ -258,31 +283,26 @@ if (canvas) {
       if (imgGroup) {
         CutoutModule.open(imgGroup, { layerManager });
       }
+    } else if (subType === "img-from-upload") {
+      ImageUploadModule.open(layerManager);
+    } else if (subType === "img-from-camera") {
+      ImageCameraModule.open(layerManager);
     }
   });
 
-  // Property clicks on sub-items (Text properties)
-  document.addEventListener("click", (e) => {
-    const propItem = (e.target as HTMLElement).closest("[data-prop]");
-    if (!propItem) return;
+  // Property clicks (Text properties) — xử lý duy nhất trong TextUIController,
+  // không đăng ký listener trùng ở đây để tránh panel bị mở 2 lần (2 handlers onclick).
 
-    const propType = propItem.getAttribute("data-prop");
-    const container = document.querySelector('.sub-group[data-section="text-props"]') as HTMLElement;
-    if (!container) return;
+  // Sync selectedLayer của TextTransform khi user chọn layer qua Layer List
+  // và xóa snapshot mốc panel (Reset sẽ lấy mốc mới ở lần mở kế tiếp).
+  eventBus.on("layer:selected", (layer: Layer) => {
+    textTransform.selectedLayer = layer && layer.type === "text" ? layer : null;
+    clearAllSnapshotsForLayer(layer.id);
+  });
 
-    if (propType === "rotate") {
-      RotateModule.open(container, { layerManager });
-    } else if (propType === "opacity") {
-      OpacityModule.open(container, { layerManager });
-    } else if (propType === "relative-position") {
-      RelativePositionModule.open(container, { layerManager });
-    } else if (propType === "color") {
-      ColorModule.open(container, { layerManager });
-    } else if (propType === "curve") {
-      curveModule.open(container);
-    } else if (propType === "texture") {
-      textureModule.open(container);
-    }
+  // Clear snapshot khi đổi nội dung text (mốc cũ không còn đúng)
+  eventBus.on("text:content-changed", (payload: { layerId: number }) => {
+    clearAllSnapshotsForLayer(payload.layerId);
   });
 
   // Initialize default canvas (2:1 ratio, 1200x600, Neon gradient: #00f260 -> #0575e6)

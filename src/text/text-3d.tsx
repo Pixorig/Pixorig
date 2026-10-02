@@ -11,6 +11,7 @@
  */
 
 import { h } from "../ui/jsx";
+import { PanelHeader } from "../ui/PanelHeader";
 import { LayerManager, Layer } from "../core/layer";
 import { TextTransform } from "./text-transform";
 import { TabBar } from "../ui/TabBar";
@@ -71,77 +72,33 @@ export class Text3DModule {
       ) as HTMLElement;
 
       // 1. Header (Back button + Title + Reset button)
-      const headerRow = (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
-            paddingBottom: "8px",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <button
-              type="button"
-              class="btn-back-3d-text"
-              style={{
-                background: "transparent",
-                border: "none",
-                color: "#fff",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                padding: "4px",
-              }}
-              title="Quay lại"
-              onClick={() => this.close(containerGroup)}
-            >
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="15 18 9 12 15 6" />
-              </svg>
-            </button>
-            <span style={{ fontWeight: "600", fontSize: "14px", color: "#fff" }}>3D Text</span>
-          </div>
-
-          <button
-            type="button"
-            class="btn-reset-3d-text"
-            style={{
-              background: "rgba(255, 255, 255, 0.08)",
-              border: "1px solid rgba(255, 255, 255, 0.15)",
-              color: "#ddd",
-              fontSize: "11px",
-              padding: "3px 8px",
-              borderRadius: "4px",
-              cursor: "pointer",
-            }}
-            onClick={() => {
-              const l = this.getTargetLayer();
-              if (l) {
-                l.text3dEnabled = false;
-                l.text3dViewType = "oblique";
-                l.text3dDepth = 15;
-                l.text3dColorMode = "auto";
-                l.text3dColor = "#000000";
-                l.text3dDarken = 30;
-                l.text3dRotateX = 0;
-                l.text3dRotateY = 0;
-                l.text3dRotateZ = 0;
-                l.text3dLightingEnabled = false;
-                l.text3dLightAngle = 90;
-                l.text3dLightIntensity = 80;
-                l.text3dLightShadow = 40;
-                l.text3dLightSpecular = 30;
-                this.redrawAndSync(l);
-                renderUI();
-              }
-            }}
-          >
-            Reset
-          </button>
-        </div>
-      ) as HTMLElement;
+      // 3D Text là hiệu ứng bật/tắt: Reset = tắt + trả toàn bộ tham số về mặc định
+      // (đúng nghĩa "bỏ 3D Text"), không phải về mốc lúc mở panel.
+      const headerRow = PanelHeader({
+        title: "3D Text",
+        onBack: () => this.close(containerGroup),
+        onReset: () => {
+          const l = this.getTargetLayer();
+          if (l) {
+            l.text3dEnabled = false;
+            l.text3dViewType = "oblique";
+            l.text3dDepth = 15;
+            l.text3dColorMode = "auto";
+            l.text3dColor = "#000000";
+            l.text3dDarken = 30;
+            l.text3dRotateX = 0;
+            l.text3dRotateY = 0;
+            l.text3dRotateZ = 0;
+            l.text3dLightingEnabled = false;
+            l.text3dLightAngle = 90;
+            l.text3dLightIntensity = 80;
+            l.text3dLightShadow = 40;
+            l.text3dLightSpecular = 30;
+            this.redrawAndSync(l);
+            renderUI();
+          }
+        },
+      });
       panel.appendChild(headerRow);
 
       // 2. View type label + TabBar (Perspective | Oblique)

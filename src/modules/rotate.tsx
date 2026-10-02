@@ -4,9 +4,11 @@
  */
 
 import { h } from "../ui/jsx";
+import { PanelHeader } from "../ui/PanelHeader";
 import { SliderControl } from "../ui/SliderControl";
 import { eventBus } from "../core/event-bus";
 import { Layer, LayerManager } from "../core/layer";
+import { captureSnapshot, getSnapshot } from "../core/panel-state-store";
 
 export interface RotateModuleOptions {
   layerManager?: LayerManager;
@@ -45,26 +47,38 @@ export const RotateModule = {
         ? Math.round(targetLayer.rotation)
         : 0;
 
-    const backBtn = (
-      <button
-        type="button"
-        id="rotate-back-btn"
-        class="sub-item"
-        style={{ marginBottom: "4px" }}
-        onClick={() => {
-          this.close(containerGroup);
-          if (onClose) onClose();
-        }}
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18">
-          <path
-            fill="currentColor"
-            d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"
-          />
-        </svg>
-        <span>Back</span>
-      </button>
-    );
+    if (!containerGroup.querySelector(".rotate-panel")) {
+      savedInnerHTML = containerGroup.innerHTML;
+    }
+    // Ghi mốc góc xoay LÚC MỞ PANEL (giống Size/Padding/Opacity):
+    // Reset luôn về giá trị tại lần mở gần nhất, không phải mặc định 0°.
+    // this.open() sau Reset là re-render (đã có .rotate-panel) nên KHÔNG ghi đè mốc.
+    if (targetLayer) {
+      captureSnapshot("rotate", targetLayer.id, { rotation: currentRotation });
+    }
+
+    const backBtn = PanelHeader({
+      title: "Rotate",
+      onBack: () => {
+        this.close(containerGroup);
+        if (onClose) onClose();
+      },
+      onReset: () => {
+        let active = targetLayer;
+        if (!active && layerManager) {
+          active = layerManager.getActiveLayer();
+        }
+        if (active && active.id !== 0) {
+          const snap = getSnapshot("rotate", active.id);
+          const resetAngle = snap ? Number(snap.rotation) : 0;
+          active.rotation = resetAngle;
+          if (layerManager) layerManager.render();
+          eventBus.emit("layer:rotated", { layer: active, rotation: resetAngle });
+          if (onAngleChange) onAngleChange(resetAngle);
+        }
+        this.open(containerGroup, options);
+      },
+    });
 
     const sliderControlEl = SliderControl({
       label: "Angle",

@@ -4,9 +4,11 @@
  */
 
 import { h } from "../ui/jsx";
+import { PanelHeader } from "../ui/PanelHeader";
 import { SliderControl } from "../ui/SliderControl";
 import { LayerManager, Layer } from "../core/layer";
 import { TextTransform } from "../text/text-transform";
+import { captureSnapshot, getSnapshot } from "../core/panel-state-store";
 
 export class CurveModule {
   private layerManager: LayerManager;
@@ -38,22 +40,34 @@ export class CurveModule {
     const targetLayer = this.getTargetLayer();
     const currentBend = targetLayer?.curveBend ?? 0;
 
-    const backBtn = (
-      <button
-        id="curve-back-btn"
-        class="sub-item"
-        style={{ marginBottom: "4px" }}
-        onClick={() => this.close(containerGroup)}
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18">
-          <path
-            fill="currentColor"
-            d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"
-          />
-        </svg>
-        <span>Back</span>
-      </button>
-    );
+    if (!containerGroup.querySelector(".curve-panel")) {
+      containerGroup.dataset._savedInner = containerGroup.innerHTML;
+    }
+    // Ghi mốc độ cong LÚC MỞ PANEL (giống Size/Padding): Reset luôn về giá trị
+    // tại lần mở gần nhất, không ép về 0. this.open() sau Reset là re-render
+    // (đã có .curve-panel) nên không ghi đè mốc.
+    if (targetLayer) {
+      captureSnapshot("curve", targetLayer.id, { curveBend: currentBend });
+    }
+
+    const backBtn = PanelHeader({
+      title: "Curve",
+      onBack: () => this.close(containerGroup),
+      onReset: () => {
+        const layer = this.getTargetLayer();
+        if (layer) {
+          const snap = getSnapshot("curve", layer.id);
+          layer.curveBend = snap ? Number(snap.curveBend) : 0;
+          this.textTransform.redrawTextLayer(layer);
+          this.layerManager.render();
+          if (this.textTransform.selectedLayer === layer) {
+            this.textTransform.drawSelectionOverlay(layer);
+          }
+          // Re-render để slider hiển thị lại giá trị đã reset
+          this.open(containerGroup);
+        }
+      },
+    });
 
     const sliderControlEl = SliderControl({
       label: "Bending",

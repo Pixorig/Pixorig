@@ -454,12 +454,17 @@ export class TextTransform {
       if (subSidebar) subSidebar.classList.remove("hidden");
       if (body) body.classList.add("sub-open");
     } else {
-      this.selectedLayer = null;
-      this.layerManager.setActiveLayer(0);
-      this.canvas.style.cursor = "default";
-      this.layerManager.render();
-      eventBus.emit("text:deselected");
-      eventBus.emit("text:hide-properties");
+      // Không tìm thấy text layer — chỉ deselect text nếu active layer
+      // hiện tại không phải image (tránh cướp click của ImageTransform)
+      const activeLayer = this.layerManager.getActiveLayer?.();
+      if (!activeLayer || activeLayer.type !== "image") {
+        this.selectedLayer = null;
+        this.layerManager.setActiveLayer(0);
+        this.canvas.style.cursor = "default";
+        this.layerManager.render();
+        eventBus.emit("text:deselected");
+        eventBus.emit("text:hide-properties");
+      }
     }
   }
 

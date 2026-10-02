@@ -3,9 +3,11 @@
  */
 
 import { h } from "../ui/jsx";
+import { PanelHeader } from "../ui/PanelHeader";
 import { LayerManager, Layer } from "../core/layer";
 import { TextTransform } from "./text-transform";
 import { SliderControl } from "../ui/SliderControl";
+import { captureSnapshot, getSnapshot } from "../core/panel-state-store";
 
 export class TextLineSpacingModule {
   private layerManager: LayerManager;
@@ -43,6 +45,14 @@ export class TextLineSpacingModule {
     const layer = this.getTargetLayer();
     const currentVal = layer?.lineSpacing ?? 0;
 
+    if (!containerGroup.querySelector(".line-spacing-panel")) {
+      containerGroup.dataset._savedInner = containerGroup.innerHTML;
+    }
+    // Ghi mốc LÚC MỞ PANEL (giống Size/Padding): Reset về giá trị lúc mở gần nhất.
+    if (layer) {
+      captureSnapshot("line-spacing", layer.id, { lineSpacing: currentVal });
+    }
+
     const panelEl = (
       <div
         class="line-spacing-panel"
@@ -56,20 +66,20 @@ export class TextLineSpacingModule {
       ></div>
     ) as HTMLElement;
 
-    const backBtn = (
-      <button
-        type="button"
-        class="sub-item"
-        style={{ marginBottom: "4px" }}
-        onClick={() => this.close(containerGroup)}
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M19 12H5" />
-          <path d="M11 18l-6-6 6-6" />
-        </svg>
-        <span>Back</span>
-      </button>
-    );
+    const backBtn = PanelHeader({
+      title: "Line Spacing",
+      onBack: () => this.close(containerGroup),
+      onReset: () => {
+        const target = this.getTargetLayer();
+        if (target) {
+          const snap = getSnapshot("line-spacing", target.id);
+          target.lineSpacing = snap ? Number(snap.lineSpacing) : 0;
+          this.redrawAndSync(target);
+          // Re-render để slider hiển thị lại giá trị đã reset
+          this.open(containerGroup);
+        }
+      },
+    });
     panelEl.appendChild(backBtn);
 
     const sliderEl = SliderControl({

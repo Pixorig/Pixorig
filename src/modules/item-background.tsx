@@ -5,11 +5,13 @@
  */
 
 import { h } from "../ui/jsx";
+import { PanelHeader } from "../ui/PanelHeader";
 import { SliderControl } from "../ui/SliderControl";
 import { TabBar } from "../ui/TabBar";
 import { LayerManager, Layer } from "../core/layer";
 import { TextTransform, TextBounds } from "../text/text-transform";
 import { ColorModule } from "./color";
+import { captureSnapshot, getSnapshot } from "../core/panel-state-store";
 
 export class ItemBackgroundModule {
   private layerManager: LayerManager;
@@ -54,6 +56,20 @@ export class ItemBackgroundModule {
       containerGroup.dataset._savedInner = containerGroup.innerHTML;
     }
 
+    // Ghi mốc THAM SỐ (4 padding + radius) LÚC MỞ PANEL — giống Size/Padding.
+    // Reset KHÔNG đụng màu/ảnh: chúng có nút xóa riêng trong tab Color/Image.
+    // this.open() sau Reset là re-render (đã có .item-bg-panel) nên không ghi đè mốc.
+    const layer = this.getTargetLayer();
+    if (layer) {
+      captureSnapshot("item-bg", layer.id, {
+        itemBgPaddingLeft: layer.itemBgPaddingLeft ?? 0,
+        itemBgPaddingRight: layer.itemBgPaddingRight ?? 0,
+        itemBgPaddingTop: layer.itemBgPaddingTop ?? 0,
+        itemBgPaddingBottom: layer.itemBgPaddingBottom ?? 0,
+        itemBgRadius: layer.itemBgRadius ?? 0,
+      });
+    }
+
     const currentTab: "color" | "image" = "color";
 
     const panelEl = (
@@ -69,22 +85,26 @@ export class ItemBackgroundModule {
       ></div>
     ) as HTMLElement;
 
-    const backBtn = (
-      <button
-        type="button"
-        class="sub-item"
-        style={{ marginBottom: "4px" }}
-        onClick={() => this.close(containerGroup)}
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18">
-          <path
-            fill="currentColor"
-            d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"
-          />
-        </svg>
-        <span>Back</span>
-      </button>
-    );
+    const backBtn = PanelHeader({
+      title: "Item Background",
+      onBack: () => this.close(containerGroup),
+      onReset: () => {
+        const l = this.getTargetLayer();
+        if (l) {
+          // Chỉ phục hồi THAM SỐ về mốc lúc mở panel gần nhất,
+          // giữ nguyên itemBgColor / itemBgImage (xóa bằng nút riêng).
+          const snap = getSnapshot("item-bg", l.id);
+          l.itemBgPaddingLeft = snap ? Number(snap.itemBgPaddingLeft) : 0;
+          l.itemBgPaddingRight = snap ? Number(snap.itemBgPaddingRight) : 0;
+          l.itemBgPaddingTop = snap ? Number(snap.itemBgPaddingTop) : 0;
+          l.itemBgPaddingBottom = snap ? Number(snap.itemBgPaddingBottom) : 0;
+          l.itemBgRadius = snap ? Number(snap.itemBgRadius) : 0;
+          this.redrawAndSync(l);
+          // Re-render để slider hiển thị lại giá trị đã reset
+          this.open(containerGroup);
+        }
+      },
+    });
 
     panelEl.appendChild(backBtn);
 

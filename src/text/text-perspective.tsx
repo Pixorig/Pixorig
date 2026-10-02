@@ -1,4 +1,5 @@
 import { h } from "../ui/jsx";
+import { PanelHeader } from "../ui/PanelHeader";
 import { LayerManager, Layer } from "../core/layer";
 import { TextTransform } from "./text-transform";
 
@@ -57,22 +58,14 @@ export class TextPerspectiveModule {
     ) as HTMLElement;
 
     // Header: Back
-    const backBtn = (
-      <button
-        type="button"
-        class="sub-item"
-        style={{ marginBottom: "4px" }}
-        onClick={() => this.close(containerGroup)}
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18">
-          <path
-            fill="currentColor"
-            d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"
-          />
-        </svg>
-        <span>Back</span>
-      </button>
-    );
+    // Ẩn Reset ở header: panel này đã có công tắc Enabled (tắt hiệu ứng) và
+    // nút "Reset" riêng bên dưới để trả 4 góc về 0 — hai nút Reset gây nhập nhằng.
+    const backBtn = PanelHeader({
+      title: "Perspective",
+      showReset: false,
+      onBack: () => this.close(containerGroup),
+      onReset: () => {},
+    });
     panelEl.appendChild(backBtn);
 
     // Enabled switch row

@@ -4,6 +4,7 @@
  */
 
 import { h } from "../ui/jsx";
+import { PanelHeader } from "../ui/PanelHeader";
 import { eventBus } from "../core/event-bus";
 import { Layer, LayerManager } from "../core/layer";
 import { TabBar } from "../ui/TabBar";
@@ -456,25 +457,15 @@ class ColorService {
 
     container.innerHTML = "";
 
-    const backBtn = (
-      <button
-        type="button"
-        id="color-back-btn"
-        class="sub-item"
-        style={{ marginBottom: "4px" }}
-        onClick={() => this.close()}
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18">
-          <path
-            fill="currentColor"
-            d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"
-          />
-        </svg>
-        <span>Back</span>
-      </button>
-    );
-
-    const backDiv = <div class="color-back">{backBtn}</div>;
+    // Color là panel hành động một lần (chọn màu = áp dụng ngay) và Reset cũ
+    // ép màu trắng cứng (#ffffff) thay vì phục hồi màu lúc mở panel — gây mất màu
+    // người dùng đang có. Vì vậy ẩn nút Reset, muốn hoàn tác dùng Undo trên topbar.
+    const backBtn = PanelHeader({
+      title: "Color",
+      showReset: false,
+      onBack: () => this.close(),
+      onReset: () => {},
+    });
 
     const tabsDiv = TabBar({
       tabs: [
@@ -497,7 +488,7 @@ class ColorService {
       </div>
     ) as HTMLElement;
 
-    container.appendChild(backDiv);
+    container.appendChild(backBtn);
     container.appendChild(tabsDiv);
     container.appendChild(contentDiv);
   }

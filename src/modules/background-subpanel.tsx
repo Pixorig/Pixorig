@@ -8,6 +8,7 @@
  */
 
 import { h } from "../ui/jsx";
+import { PanelHeader } from "../ui/PanelHeader";
 import { showPopup, showDropdown } from "../ui/Popup";
 import { LayerManager } from "../core/layer";
 import { eventBus } from "../core/event-bus";
@@ -504,21 +505,18 @@ export class BackgroundSubpanel {
       this.savedSubHTML = subSidebar.innerHTML;
     }
 
-    const backBtn = (
-      <button
-        type="button"
-        class="sub-item"
-        style={{ marginBottom: "4px" }}
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18">
-          <path
-            fill="currentColor"
-            d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"
-          />
-        </svg>
-        <span>Back</span>
-      </button>
-    ) as HTMLElement;
+    const backBtn = PanelHeader({
+      title: "Canvas Size",
+      onBack: () => restoreSubpanel(),
+      onReset: () => {
+        widthInput.value = String(canvasW);
+        heightInput.value = String(canvasH);
+        currentW = canvasW;
+        currentH = canvasH;
+        presetLabel.textContent = "Select preset...";
+        updateAspect();
+      },
+    });
 
     const aspectDisplay = (
       <div
@@ -684,8 +682,6 @@ export class BackgroundSubpanel {
         eventBus.emit("subsidebar:restored");
       }
     };
-
-    backBtn.addEventListener("click", restoreSubpanel);
 
     applyBtn.addEventListener("click", () => {
       const newW = parseInt(widthInput.value, 10);

@@ -4,10 +4,12 @@
  */
 
 import { h } from "../ui/jsx";
+import { PanelHeader } from "../ui/PanelHeader";
 import { LayerManager, Layer } from "../core/layer";
 import { TextTransform } from "./text-transform";
 import { SliderControl } from "../ui/SliderControl";
 import { TabBar } from "../ui/TabBar";
+import { captureSnapshot, getSnapshot } from "../core/panel-state-store";
 
 type SpacingTab = "letters" | "words";
 
@@ -50,6 +52,17 @@ export class TextSpacingModule {
     const currentLetters = layer?.letterSpacing ?? 0;
     const currentWords = layer?.wordSpacing ?? 0;
 
+    if (!containerGroup.querySelector(".spacing-panel")) {
+      containerGroup.dataset._savedInner = containerGroup.innerHTML;
+    }
+    // Ghi mốc LÚC MỞ PANEL (giống Size/Padding): Reset về giá trị lúc mở gần nhất.
+    if (layer) {
+      captureSnapshot("spacing", layer.id, {
+        letterSpacing: currentLetters,
+        wordSpacing: currentWords,
+      });
+    }
+
     const panelEl = (
       <div
         class="spacing-panel"
@@ -64,20 +77,20 @@ export class TextSpacingModule {
     ) as HTMLElement;
 
     // Back button
-    const backBtn = (
-      <button
-        type="button"
-        class="sub-item"
-        style={{ marginBottom: "4px" }}
-        onClick={() => this.close(containerGroup)}
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M19 12H5" />
-          <path d="M11 18l-6-6 6-6" />
-        </svg>
-        <span>Back</span>
-      </button>
-    );
+    const backBtn = PanelHeader({
+      title: "Spacing",
+      onBack: () => this.close(containerGroup),
+      onReset: () => {
+        const target = this.getTargetLayer();
+        if (target) {
+          const snap = getSnapshot("spacing", target.id);
+          target.letterSpacing = snap ? Number(snap.letterSpacing) : 0;
+          target.wordSpacing = snap ? Number(snap.wordSpacing) : 0;
+          this.redrawAndSync(target);
+          this.open(containerGroup);
+        }
+      },
+    });
     panelEl.appendChild(backBtn);
 
     let activeTab: SpacingTab = "letters";

@@ -9,10 +9,12 @@
  */
 
 import { h } from "../ui/jsx";
+import { PanelHeader } from "../ui/PanelHeader";
 import { SliderControl } from "../ui/SliderControl";
 import { LayerManager, Layer } from "../core/layer";
 import { TextTransform } from "./text-transform";
 import { ColorModule } from "../modules/color";
+import { captureSnapshot, getSnapshot } from "../core/panel-state-store";
 
 export class Text3DShadowModule {
   private layerManager: LayerManager;
@@ -122,11 +124,28 @@ export class Text3DShadowModule {
     this.redrawAndSync(layer);
   }
 
-  open(containerGroup: HTMLElement): void {
+  open(containerGroup: HTMLElement, opts: { captureSnapshotValues?: boolean } = {}): void {
     if (!containerGroup) return;
 
     if (!containerGroup.querySelector(".text-3d-shadow-panel")) {
       containerGroup.dataset._savedInner = containerGroup.innerHTML;
+    }
+
+    // Ghi mốc THAM SỐ LÚC MỞ PANEL (giống Shadow): opacity, blur, expand,
+    // angle, distance. Reset phục hồi các giá trị này — KHÔNG tắt hiệu ứng,
+    // KHÔNG đụng màu (màu có nút xóa riêng). Chỉ ghi khi mở TỪ MENU;
+    // re-render nội bộ (sau Reset) không ghi đè mốc.
+    if (opts.captureSnapshotValues !== false) {
+      const layer = this.getTargetLayer();
+      if (layer) {
+        captureSnapshot("3d-shadow", layer.id, {
+          shadow3dOpacity: layer.shadow3dOpacity ?? 0.5,
+          shadow3dBlur: layer.shadow3dBlur ?? 4,
+          shadow3dExpand: layer.shadow3dExpand ?? 0,
+          shadow3dAngle: layer.shadow3dAngle ?? 135,
+          shadow3dDistance: layer.shadow3dDistance ?? 26,
+        });
+      }
     }
 
     const renderUI = () => {
@@ -147,22 +166,27 @@ export class Text3DShadowModule {
       ) as HTMLElement;
 
       // Back button
-      const backBtn = (
-        <button
-          type="button"
-          class="sub-item"
-          style={{ marginBottom: "4px" }}
-          onClick={() => this.close(containerGroup)}
-        >
-          <svg viewBox="0 0 24 24" width="18" height="18">
-            <path
-              fill="currentColor"
-              d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"
-            />
-          </svg>
-          <span>Back</span>
-        </button>
-      );
+      // Reset = phục hồi THAM SỐ về mốc lúc mở panel gần nhất (giống Shadow):
+      // opacity, blur, expand, angle, distance. Không tắt hiệu ứng, không đụng màu.
+      const backBtn = PanelHeader({
+        title: "3D Shadow",
+        onBack: () => this.close(containerGroup),
+        onReset: () => {
+          const l = this.getTargetLayer();
+          if (l) {
+            const snap = getSnapshot("3d-shadow", l.id);
+            l.shadow3dOpacity = snap ? Number(snap.shadow3dOpacity) : 0.5;
+            l.shadow3dBlur = snap ? Number(snap.shadow3dBlur) : 4;
+            l.shadow3dExpand = snap ? Number(snap.shadow3dExpand) : 0;
+            l.shadow3dAngle = snap ? Number(snap.shadow3dAngle) : 135;
+            l.shadow3dDistance = snap ? Number(snap.shadow3dDistance) : 26;
+            this.redrawAndSync(l);
+            // Re-render để slider + canvas hướng bóng hiển thị lại giá trị mốc,
+            // KHÔNG ghi đè mốc
+            this.open(containerGroup, { captureSnapshotValues: false });
+          }
+        },
+      });
       panel.appendChild(backBtn);
 
       // Color row: [Select Color] [Xóa]
