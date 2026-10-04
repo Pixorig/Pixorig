@@ -9,6 +9,92 @@
 </head>
 
 <body>
+  <noscript>
+    <style>
+      #app {
+        display: none !important;
+      }
+
+      .noscript-screen {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        padding: 24px;
+        background:
+          radial-gradient(circle at 20% 20%, rgba(0, 242, 96, 0.12), transparent 34%),
+          radial-gradient(circle at 80% 80%, rgba(5, 117, 230, 0.16), transparent 38%),
+          #1e1e1e;
+        color: #e0e0e0;
+        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      }
+
+      .noscript-card {
+        width: min(100%, 440px);
+        padding: 36px 32px;
+        border: 1px solid #3c3c3c;
+        border-radius: 16px;
+        background: rgba(45, 45, 45, 0.94);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        text-align: center;
+      }
+
+      .noscript-brand {
+        display: inline-block;
+        margin-bottom: 24px;
+        color: #00f260;
+        background: linear-gradient(135deg, #00f260, #0575e6);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-size: 24px;
+        font-weight: 700;
+        letter-spacing: 0.3px;
+      }
+
+      .noscript-icon {
+        display: grid;
+        place-items: center;
+        width: 56px;
+        height: 56px;
+        margin: 0 auto 20px;
+        border: 1px solid rgba(0, 242, 96, 0.35);
+        border-radius: 14px;
+        background: linear-gradient(135deg, rgba(0, 242, 96, 0.16), rgba(5, 117, 230, 0.2));
+        color: #8fffc0;
+        font-size: 26px;
+      }
+
+      .noscript-card h1 {
+        margin-bottom: 12px;
+        color: #fff;
+        font-size: 21px;
+        line-height: 1.3;
+      }
+
+      .noscript-card p {
+        color: #a9a9a9;
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      .noscript-card strong {
+        color: #e0e0e0;
+        font-weight: 600;
+      }
+    </style>
+    <div class="noscript-screen">
+      <section class="noscript-card" aria-labelledby="noscript-title">
+        <div class="noscript-brand">Pixorig</div>
+        <div class="noscript-icon" aria-hidden="true">JS</div>
+        <h1 id="noscript-title">JavaScript and WebAssembly are required</h1>
+        <p>
+          Pixorig needs <strong>JavaScript</strong> and <strong>WebAssembly (WASM)</strong> enabled in your browser to work.
+          Please enable them, then reload this page.
+        </p>
+      </section>
+    </div>
+  </noscript>
   <div id="app">
     <!-- Top bar -->
     <header id="topbar">

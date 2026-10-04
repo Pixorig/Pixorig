@@ -151,6 +151,8 @@ export class Layer {
   // Reflection (Phản chiếu bóng gương lật ngược phía dưới)
   reflectionEnabled = false;
   reflectionOffset = 0; // -100 ~ 100 (0 là sát mép chân chữ chính, âm là lấn lên trên chữ, dương là lùi xuống)
+  reflectionOpacity = 0.45; // 0 ~ 1 (độ đậm phản chiếu)
+  reflectionDistance = 0; // alias / khoảng cách lùi xuống chân chữ
 
   // Cache mask alpha cho inner shadow (chỉ dựng lại khi layout chữ đổi)
   _innerShadowMaskCanvas: HTMLCanvasElement | null = null;

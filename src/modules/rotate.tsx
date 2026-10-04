@@ -6,14 +6,14 @@
 import { h } from "../ui/jsx";
 import { PanelHeader } from "../ui/PanelHeader";
 import { SliderControl } from "../ui/SliderControl";
-import { eventBus } from "../core/event-bus";
-import { Layer, LayerManager } from "../core/layer";
-import { captureSnapshot, getSnapshot } from "../core/panel-state-store";
+import { Layer } from "../core/layer";
+import {
+  RotateService,
+  type RotateServiceOptions,
+} from "../core/layer/rotate-service";
 
-export interface RotateModuleOptions {
-  layerManager?: LayerManager;
+export interface RotateModuleOptions extends RotateServiceOptions {
   targetLayer?: Layer | null;
-  onAngleChange?: (angle: number) => void;
   onClose?: () => void;
 }
 
@@ -22,8 +22,6 @@ let savedInnerHTML: string | null = null;
 export const RotateModule = {
   /**
    * Opens Rotate sub-panel inside a container
-   * @param containerGroup - Container element
-   * @param options - LayerManager, Layer or callback options
    */
   open(containerGroup: HTMLElement | null, options: RotateModuleOptions = {}): void {
     if (!containerGroup) return;
@@ -42,19 +40,10 @@ export const RotateModule = {
       }
     }
 
-    const currentRotation =
-      targetLayer && typeof targetLayer.rotation === "number"
-        ? Math.round(targetLayer.rotation)
-        : 0;
+    const currentRotation = RotateService.getRotation(targetLayer);
 
-    if (!containerGroup.querySelector(".rotate-panel")) {
-      savedInnerHTML = containerGroup.innerHTML;
-    }
-    // Ghi mốc góc xoay LÚC MỞ PANEL (giống Size/Padding/Opacity):
-    // Reset luôn về giá trị tại lần mở gần nhất, không phải mặc định 0°.
-    // this.open() sau Reset là re-render (đã có .rotate-panel) nên KHÔNG ghi đè mốc.
     if (targetLayer) {
-      captureSnapshot("rotate", targetLayer.id, { rotation: currentRotation });
+      RotateService.captureInitialState(targetLayer);
     }
 
     const backBtn = PanelHeader({
@@ -68,14 +57,7 @@ export const RotateModule = {
         if (!active && layerManager) {
           active = layerManager.getActiveLayer();
         }
-        if (active && active.id !== 0) {
-          const snap = getSnapshot("rotate", active.id);
-          const resetAngle = snap ? Number(snap.rotation) : 0;
-          active.rotation = resetAngle;
-          if (layerManager) layerManager.render();
-          eventBus.emit("layer:rotated", { layer: active, rotation: resetAngle });
-          if (onAngleChange) onAngleChange(resetAngle);
-        }
+        RotateService.resetRotation(active, { layerManager, onAngleChange });
         this.open(containerGroup, options);
       },
     });
@@ -92,18 +74,7 @@ export const RotateModule = {
         if (!active && layerManager) {
           active = layerManager.getActiveLayer();
         }
-
-        if (active && active.id !== 0) {
-          active.rotation = val;
-          if (layerManager) {
-            layerManager.render();
-          }
-          eventBus.emit("layer:rotated", { layer: active, rotation: val });
-        }
-
-        if (onAngleChange) {
-          onAngleChange(val);
-        }
+        RotateService.setRotation(active, val, { layerManager, onAngleChange });
       },
     });
 

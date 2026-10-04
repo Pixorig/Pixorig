@@ -2581,7 +2581,10 @@ export class TextTransform {
     // Khi offset = 0: khoảng cách = 0 (bóng phản chiếu sát khít với đáy chữ chính)
     // Khi offset < 0 (-100 ~ 0): bóng đi lên lấn quá chân chữ
     // Khi offset > 0 (0 ~ 100): bóng lùi dần xuống dưới
-    const offsetVal = layer.reflectionOffset ?? 0;
+    const offsetVal =
+      layer.reflectionDistance !== undefined && layer.reflectionDistance !== 0
+        ? layer.reflectionDistance
+        : layer.reflectionOffset ?? 0;
     const gap = offsetVal * 1.0;
 
     const mirrorCanvas = document.createElement("canvas");
@@ -2609,8 +2612,9 @@ export class TextTransform {
     const maskCtx = maskCanvas.getContext("2d");
     if (maskCtx) {
       const grad = maskCtx.createLinearGradient(0, reflectTop, 0, reflectBottom);
-      grad.addColorStop(0, "rgba(255, 255, 255, 0.45)");
-      grad.addColorStop(0.5, "rgba(255, 255, 255, 0.15)");
+      const topOpacity = Math.max(0, Math.min(1, layer.reflectionOpacity ?? 0.45));
+      grad.addColorStop(0, `rgba(255, 255, 255, ${topOpacity})`);
+      grad.addColorStop(0.5, `rgba(255, 255, 255, ${topOpacity * 0.33})`);
       grad.addColorStop(1, "rgba(255, 255, 255, 0)");
 
       maskCtx.fillStyle = grad;

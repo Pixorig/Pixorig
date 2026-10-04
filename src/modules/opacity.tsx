@@ -6,14 +6,14 @@
 import { h } from "../ui/jsx";
 import { PanelHeader } from "../ui/PanelHeader";
 import { SliderControl } from "../ui/SliderControl";
-import { eventBus } from "../core/event-bus";
-import { Layer, LayerManager } from "../core/layer";
-import { captureSnapshot, getSnapshot } from "../core/panel-state-store";
+import { Layer } from "../core/layer";
+import {
+  OpacityService,
+  type OpacityServiceOptions,
+} from "../core/layer/opacity-service";
 
-export interface OpacityModuleOptions {
-  layerManager?: LayerManager;
+export interface OpacityModuleOptions extends OpacityServiceOptions {
   targetLayer?: Layer | null;
-  onOpacityChange?: (opacity: number) => void;
   onClose?: () => void;
 }
 
@@ -22,8 +22,6 @@ let savedInnerHTML: string | null = null;
 export const OpacityModule = {
   /**
    * Opens Opacity sub-panel inside a container
-   * @param containerGroup - Container element
-   * @param options - LayerManager, Layer or callback options
    */
   open(containerGroup: HTMLElement | null, options: OpacityModuleOptions = {}): void {
     if (!containerGroup) return;
@@ -38,19 +36,14 @@ export const OpacityModule = {
       }
     }
 
-    const currentOpacity =
-      targetLayer && typeof targetLayer.opacity === "number"
-        ? Math.round(targetLayer.opacity * 100)
-        : 100;
+    const currentOpacity = OpacityService.getOpacityPercent(targetLayer);
 
     if (!containerGroup.querySelector(".opacity-panel")) {
       savedInnerHTML = containerGroup.innerHTML;
     }
-    // Ghi mốc opacity LÚC MỞ PANEL (giống Size/Padding):
-    // Reset luôn về giá trị tại lần mở gần nhất, không phải mặc định 100%.
-    // this.open() sau Reset là re-render (đã có .opacity-panel) nên KHÔNG ghi đè mốc.
+
     if (targetLayer) {
-      captureSnapshot("opacity", targetLayer.id, { opacity: currentOpacity });
+      OpacityService.captureInitialState(targetLayer);
     }
 
     const backBtn = PanelHeader({
@@ -64,15 +57,7 @@ export const OpacityModule = {
         if (!active && layerManager) {
           active = layerManager.getActiveLayer();
         }
-        if (active && active.id !== 0) {
-          const snap = getSnapshot("opacity", active.id);
-          const resetPercent = snap ? Number(snap.opacity) : 100;
-          const normalized = Math.max(0, Math.min(1, resetPercent / 100));
-          active.setOpacity(normalized);
-          if (layerManager) layerManager.render();
-          eventBus.emit("layer:opacity-changed", { layer: active, opacity: normalized });
-          if (onOpacityChange) onOpacityChange(normalized);
-        }
+        OpacityService.resetOpacity(active, { layerManager, onOpacityChange });
         this.open(containerGroup, options);
       },
     });
@@ -89,23 +74,7 @@ export const OpacityModule = {
         if (!active && layerManager) {
           active = layerManager.getActiveLayer();
         }
-
-        const normalizedOpacity = val / 100;
-
-        if (active && active.id !== 0) {
-          active.setOpacity(normalizedOpacity);
-          if (layerManager) {
-            layerManager.render();
-          }
-          eventBus.emit("layer:opacity-changed", {
-            layer: active,
-            opacity: normalizedOpacity,
-          });
-        }
-
-        if (onOpacityChange) {
-          onOpacityChange(normalizedOpacity);
-        }
+        OpacityService.setOpacity(active, val, { layerManager, onOpacityChange });
       },
     });
 
