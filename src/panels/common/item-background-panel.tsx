@@ -10,7 +10,7 @@ import {
 import { PreactPanelHeader } from "../../ui/base/panel-header";
 import { PreactTabBar } from "../../ui/base/tab-bar";
 import { SliderControlGroup } from "../../ui/base/slider-control-group";
-import { ColorModule } from "../../modules/color";
+import { mountColorPanel } from "./color-panel";
 
 interface ItemBackgroundPanelProps {
   initialState: ItemBackgroundState;
@@ -67,7 +67,7 @@ export function ItemBackgroundPanel({
 
   const handleOpenColorPicker = () => {
     containerGroup.dataset._savedInner_bg = containerGroup.innerHTML;
-    ColorModule.open(containerGroup, {
+    mountColorPanel(containerGroup, {
       onColorChange: (color) => {
         let finalColor: any = color;
         if (typeof color === "object" && color !== null && "kind" in color && color.kind === "solid") {
@@ -78,7 +78,7 @@ export function ItemBackgroundPanel({
       onClose: () => {
         onRefreshPanel();
       },
-    });
+    }, () => {});
   };
 
   const handleClearColor = () => {

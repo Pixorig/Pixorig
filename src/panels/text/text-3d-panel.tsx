@@ -10,7 +10,7 @@ import {
 import { PreactPanelHeader } from "../../ui/base/panel-header";
 import { PreactTabBar } from "../../ui/base/tab-bar";
 import { SliderControlGroup } from "../../ui/base/slider-control-group";
-import { ColorModule } from "../../modules/color";
+import { mountColorPanel } from "../common/color-panel";
 
 export interface Text3DPanelContext extends Text3DContext {
   layerManager?: LayerManager;
@@ -58,7 +58,7 @@ export function Text3DPanel({
   const handleOpenColorPicker = () => {
     if (state.colorMode !== "color") return;
     containerGroup.dataset._savedInner_3dText = containerGroup.innerHTML;
-    ColorModule.open(containerGroup, {
+    mountColorPanel(containerGroup, {
       layerManager: context.layerManager,
       onColorChange: (color) => {
         const updated = Text3DService.setColor(color, context);
@@ -67,7 +67,7 @@ export function Text3DPanel({
       onClose: () => {
         onRefreshPanel();
       },
-    });
+    }, () => {});
   };
 
   const handleDeleteColor = () => {

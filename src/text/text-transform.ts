@@ -5,7 +5,7 @@
 
 import { Layer, LayerManager } from "../core/layer";
 import { eventBus } from "../core/event-bus";
-import { ColorModule } from "../modules/color";
+import { ColorService } from "../core/layer/color-service";
 
 export interface TextBounds {
   x: number;
@@ -773,12 +773,12 @@ export class TextTransform {
           if (fill.kind === "solid") {
             layer.ctx.fillStyle = fill.hex;
           } else if (fill.kind === "preset" || (fill.kind === "custom" && fill.data?.type === "linear")) {
-            const grad = ColorModule.createGradientFillForCtx(layer.ctx, bgBounds, fill);
+            const grad = ColorService.createGradientFillForCtx(layer.ctx, bgBounds, fill);
             if (grad) {
               layer.ctx.fillStyle = grad;
             }
           } else if (fill.kind === "custom" && fill.data?.meshPoints) {
-            const meshPattern = ColorModule.createMeshPatternForBounds(layer.ctx, bgBounds, fill);
+            const meshPattern = ColorService.createMeshPatternForBounds(layer.ctx, bgBounds, fill);
             if (meshPattern) {
               layer.ctx.fillStyle = meshPattern;
             }
@@ -843,14 +843,14 @@ export class TextTransform {
         (fillObj.data.type === "radial" || fillObj.data.type === "mesh");
 
       if (isMesh) {
-        textPattern = ColorModule.createMeshPatternForBounds(
+        textPattern = ColorService.createMeshPatternForBounds(
           layer.ctx,
           bounds,
           fillObj
         );
         isPatternFill = true;
       } else {
-        const gradFill = ColorModule.createGradientFillForCtx(
+        const gradFill = ColorService.createGradientFillForCtx(
           layer.ctx,
           bounds,
           fillObj
@@ -990,7 +990,7 @@ export class TextTransform {
           const tctx = tintCanvas.getContext("2d");
           if (tctx) {
             let tintFill: CanvasGradient | CanvasPattern | null =
-              ColorModule.createGradientFillForCtx(
+              ColorService.createGradientFillForCtx(
                 tctx,
                 gradBounds,
                 shadowFillObj
@@ -998,7 +998,7 @@ export class TextTransform {
             if (!tintFill) {
               // Mesh/radial: pattern phủ đúng bbox. spread mesh (≥1.6 bbox)
               // luôn vượt quá bbox nên các blob phủ kín, không lộ nền đen.
-              tintFill = ColorModule.createMeshPatternForBounds(
+              tintFill = ColorService.createMeshPatternForBounds(
                 tctx,
                 gradBounds,
                 shadowFillObj
@@ -1514,9 +1514,9 @@ export class TextTransform {
         const tBounds = bounds || { x: layer.x, y: layer.y, width: layer.canvas.width, height: layer.canvas.height };
         if (tCtx) {
           let tintFill: CanvasGradient | CanvasPattern | null =
-            ColorModule.createGradientFillForCtx(tCtx, tBounds, shadowFillObj);
+            ColorService.createGradientFillForCtx(tCtx, tBounds, shadowFillObj);
           if (!tintFill) {
-            tintFill = ColorModule.createMeshPatternForBounds(tCtx, tBounds, shadowFillObj);
+            tintFill = ColorService.createMeshPatternForBounds(tCtx, tBounds, shadowFillObj);
           }
           if (tintFill) {
             tCtx.fillStyle = tintFill as string | CanvasGradient | CanvasPattern;
@@ -1568,8 +1568,8 @@ export class TextTransform {
         } else if (sc?.kind === "solid") {
           strokeStyle = sc.hex as string;
         } else if (strokeBounds && (sc?.kind === "linear" || sc?.kind === "radial" || sc?.kind === "custom")) {
-          const g = ColorModule.createGradientFillForCtx(layer.ctx, strokeBounds, sc)
-            || (sc?.kind === "custom" ? ColorModule.createMeshPatternForBounds(layer.ctx, strokeBounds, sc) : null);
+          const g = ColorService.createGradientFillForCtx(layer.ctx, strokeBounds, sc)
+            || (sc?.kind === "custom" ? ColorService.createMeshPatternForBounds(layer.ctx, strokeBounds, sc) : null);
           strokeStyle = g;
         }
       }
@@ -2005,9 +2005,9 @@ export class TextTransform {
           (extrudeFillObj.data.type === "radial" || extrudeFillObj.data.type === "mesh");
 
         if (isMesh) {
-          gradFill = ColorModule.createMeshPatternForBounds(gpCtx, bounds, extrudeFillObj);
+          gradFill = ColorService.createMeshPatternForBounds(gpCtx, bounds, extrudeFillObj);
         } else {
-          gradFill = ColorModule.createGradientFillForCtx(gpCtx, bounds, extrudeFillObj);
+          gradFill = ColorService.createGradientFillForCtx(gpCtx, bounds, extrudeFillObj);
         }
 
         gpCtx.fillStyle = gradFill || "#000000";
@@ -2535,9 +2535,9 @@ export class TextTransform {
       const tintCtx = tintCanvas.getContext("2d");
       if (tintCtx) {
         let tintFill: CanvasGradient | CanvasPattern | null =
-          ColorModule.createGradientFillForCtx(tintCtx, gradBounds, shadowFillObj);
+          ColorService.createGradientFillForCtx(tintCtx, gradBounds, shadowFillObj);
         if (!tintFill) {
-          tintFill = ColorModule.createMeshPatternForBounds(tintCtx, gradBounds, shadowFillObj);
+          tintFill = ColorService.createMeshPatternForBounds(tintCtx, gradBounds, shadowFillObj);
         }
         if (tintFill) {
           tintCtx.fillStyle = tintFill as string | CanvasGradient | CanvasPattern;

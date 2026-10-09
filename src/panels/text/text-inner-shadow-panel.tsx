@@ -9,7 +9,7 @@ import {
 } from "../../core/text/text-inner-shadow-service";
 import { PreactPanelHeader } from "../../ui/base/panel-header";
 import { SliderControlGroup } from "../../ui/base/slider-control-group";
-import { ColorModule } from "../../modules/color";
+import { mountColorPanel } from "../common/color-panel";
 
 export interface TextInnerShadowPanelContext extends TextInnerShadowContext {
   layerManager?: LayerManager;
@@ -40,7 +40,7 @@ export function TextInnerShadowPanel({
 
   const handleOpenColorPicker = () => {
     containerGroup.dataset._savedInner_innerShadow = containerGroup.innerHTML;
-    ColorModule.open(containerGroup, {
+    mountColorPanel(containerGroup, {
       layerManager: context.layerManager,
       onColorChange: (color) => {
         TextInnerShadowService.setColor(color, context);
@@ -52,7 +52,7 @@ export function TextInnerShadowPanel({
       onClose: () => {
         onRefreshPanel();
       },
-    });
+    }, () => {});
   };
 
   const handleClearColor = () => {

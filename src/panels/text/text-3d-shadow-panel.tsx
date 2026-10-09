@@ -9,7 +9,7 @@ import {
 } from "../../core/text/text-3d-shadow-service";
 import { PreactPanelHeader } from "../../ui/base/panel-header";
 import { SliderControlGroup } from "../../ui/base/slider-control-group";
-import { ColorModule } from "../../modules/color";
+import { mountColorPanel } from "../common/color-panel";
 
 export interface Text3DShadowPanelContext extends Text3DShadowContext {
   layerManager?: LayerManager;
@@ -41,7 +41,7 @@ export function Text3DShadowPanel({
 
   const handleOpenColorPicker = () => {
     containerGroup.dataset._savedInner_3d_shadow = containerGroup.innerHTML;
-    ColorModule.open(containerGroup, {
+    mountColorPanel(containerGroup, {
       layerManager: context.layerManager,
       onColorChange: (color) => {
         const updated = Text3DShadowService.setColor(color, context);
@@ -50,7 +50,7 @@ export function Text3DShadowPanel({
       onClose: () => {
         onRefreshPanel();
       },
-    });
+    }, () => {});
   };
 
   const handleDeleteColor = () => {

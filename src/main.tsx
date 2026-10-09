@@ -1,19 +1,32 @@
+/** @jsx h */
+/** @jsxFrag Fragment */
+import { h } from "preact";
 import { LayerManager, Layer } from "./core/layer";
 import { TextTransform } from "./text/text-transform";
 import { TextHandler } from "./text/text";
-import { createLayerListPanel } from "./ui/LayerList";
-import { ColorModule } from "./modules/color";
-import { CropModule } from "./modules/crop";
-import { GradientModule } from "./modules/gradient";
-import { BackgroundSubpanel } from "./modules/background-subpanel";
-import { CutoutModule } from "./modules/cutout";
-import { ImageUploadModule } from "./image/image-upload";
-import { ImageCameraModule } from "./image/image-camera";
+import { mountLayerListPanel } from "./ui/LayerList";
+import { ColorService } from "./core/layer/color-service";
+import { mountColorPanel } from "./panels/common/color-panel";
+import {
+  openCropPanel,
+  type CropPanelOptions,
+} from "./panels/common/crop-panel";
+import { openGradientPanel, type GradientModuleOptions } from "./panels/common/gradient-panel";
+import {
+  openCameraModal,
+  openUploadModal,
+  SizePanel,
+  openTransparent,
+} from "./panels/common/background-subpanel";
+import { render } from "preact";
+import { mountCutoutPanel } from "./panels/common/cutout-panel";
+import { openImageUploadModal } from "./image/image-upload";
+import { openImageCameraModal } from "./image/image-camera";
 import { BarActions } from "./core/bar-actions";
 import { ImageTransform } from "./core/image-transform";
 import { eventBus } from "./core/event-bus";
 import { clearAllSnapshotsForLayer } from "./core/panel-state-store";
-import { showDropdown } from "./ui/Popup";
+import { showDropdown } from "./ui/dropdown";
 
 console.log("[Pixorig] Initialized full app with Vite + TS/TSX");
 
@@ -26,25 +39,55 @@ if (canvas) {
   const textHandler = new TextHandler(layerManager, textTransform);
 
   const barActions = new BarActions(layerManager);
-  const backgroundSubpanel = new BackgroundSubpanel({ layerManager });
   // Selection Box / Bounding Box cho image layer (di chuyển, resize, xoay)
   new ImageTransform(canvas, layerManager);
 
+  // Persistent preact host for the background Size panel
+  const sizePanelHost = document.createElement("div");
+
+  const mountSizePanel = () => {
+    const subSidebar = document.getElementById("sub-sidebar");
+    if (!subSidebar) return;
+
+    // Lưu nội dung hiện tại để Back khôi phục lại (giống bản modules cũ)
+    if (!subSidebar.querySelector(".size-panel")) {
+      subSidebar.dataset._savedInner = subSidebar.innerHTML;
+    }
+    subSidebar.innerHTML = "";
+    subSidebar.appendChild(sizePanelHost);
+
+    const restoreSubpanel = () => {
+      render(null, sizePanelHost);
+      if (sizePanelHost.parentNode) {
+        sizePanelHost.parentNode.removeChild(sizePanelHost);
+      }
+      if (subSidebar.dataset._savedInner) {
+        subSidebar.innerHTML = subSidebar.dataset._savedInner;
+        delete subSidebar.dataset._savedInner;
+      }
+      eventBus.emit("subsidebar:restored");
+    };
+
+    render(
+      <SizePanel layerManager={layerManager} onBack={restoreSubpanel} />,
+      sizePanelHost
+    );
+  };
+
   // Gradient custom popup listener
   eventBus.on("gradient:open-custom", (payload?: { targetLayer?: Layer; onApply?: (data: any) => void }) => {
-    GradientModule.open({
+    openGradientPanel({
       layerManager,
       textTransform,
       targetLayer: payload?.targetLayer,
       onApply: payload?.onApply,
-    });
+    } as GradientModuleOptions);
   });
 
-  // Setup Layer Sidebar (TSX Real DOM)
+  // Setup Layer Sidebar (Preact)
   const layerListContainer = document.getElementById("layer-list");
   if (layerListContainer) {
-    createLayerListPanel({
-      container: layerListContainer,
+    mountLayerListPanel(layerListContainer, {
       layerManager,
       onSelect: (id) => layerManager.setActiveLayer(id),
       onDelete: (id) => layerManager.deleteLayer(id),
@@ -158,7 +201,7 @@ if (canvas) {
           ],
           onItemClick: (item) => {
             if (item.action === "add-image") {
-              ImageUploadModule.open(layerManager);
+              openImageUploadModal(layerManager);
             } else if (item.action === "add-text") {
               textHandler.createNewTextLayer();
             } else if (item.action === "add-date") {
@@ -259,34 +302,56 @@ if (canvas) {
     const subType = subItem.getAttribute("data-sub");
     if (subType === "bg-crop") {
       const bgLayer = layerManager.getBackgroundLayer();
-      CropModule.open({
+      openCropPanel({
         layerManager,
         sourceImage: bgLayer.image || null,
-      });
+      } as CropPanelOptions);
     } else if (subType === "bg-color") {
       const subSidebar = document.getElementById("sub-sidebar");
       const bgLayer = layerManager.getBackgroundLayer();
-      ColorModule.open(subSidebar, {
-        layerManager,
-        targetLayer: bgLayer,
-      });
+      if (subSidebar) {
+        if (!subSidebar.querySelector(".color-panel")) {
+          subSidebar.dataset._savedInner = subSidebar.innerHTML;
+        }
+        mountColorPanel(subSidebar, {
+          layerManager,
+          targetLayer: bgLayer,
+        }, () => {
+          if (subSidebar.dataset._savedInner) {
+            subSidebar.innerHTML = subSidebar.dataset._savedInner;
+            delete subSidebar.dataset._savedInner;
+            eventBus.emit("subsidebar:restored");
+          }
+        });
+      }
     } else if (subType === "bg-from-camera") {
-      backgroundSubpanel.openCamera();
+      openCameraModal({ layerManager });
     } else if (subType === "bg-from-upload") {
-      backgroundSubpanel.openUpload();
+      openUploadModal({ layerManager });
     } else if (subType === "bg-size") {
-      backgroundSubpanel.openSizePanel();
+      mountSizePanel();
     } else if (subType === "bg-transparent") {
-      backgroundSubpanel.openTransparent();
+      openTransparent(layerManager);
     } else if (subType === "img-cutout") {
       const imgGroup = document.querySelector('.sub-group[data-section="image"]') as HTMLElement;
       if (imgGroup) {
-        CutoutModule.open(imgGroup, { layerManager });
+        if (
+          !imgGroup.querySelector(".cutout-panel") &&
+          !imgGroup.querySelector(".preact-cutout-panel-wrapper")
+        ) {
+          imgGroup.dataset._savedInner = imgGroup.innerHTML;
+        }
+        mountCutoutPanel(imgGroup, { layerManager }, () => {
+          if (imgGroup.dataset._savedInner) {
+            imgGroup.innerHTML = imgGroup.dataset._savedInner;
+            delete imgGroup.dataset._savedInner;
+          }
+        });
       }
     } else if (subType === "img-from-upload") {
-      ImageUploadModule.open(layerManager);
+      openImageUploadModal(layerManager);
     } else if (subType === "img-from-camera") {
-      ImageCameraModule.open(layerManager);
+      openImageCameraModal(layerManager);
     }
   });
 
@@ -324,7 +389,7 @@ if (canvas) {
     bgLayer.ctx.fillStyle = bgGrad;
     bgLayer.ctx.fillRect(0, 0, W, H);
 
-    ColorModule.lastBackground = {
+    ColorService.lastBackground = {
       kind: "preset",
       colors: ["#00f260", "#0575e6"],
       angleDeg: 135,

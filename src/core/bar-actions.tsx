@@ -1,5 +1,7 @@
+/** @jsx h */
+/** @jsxFrag Fragment */
 /**
- * Topbar Actions & History Stack Module - TSX Real DOM
+ * Topbar Actions & History Stack Module
  * Cung cấp:
  * - Snapshot-based Undo / Redo history stack cho layers
  * - More menu dropdown:
@@ -9,10 +11,13 @@
  *   + Shortcuts popup: Bảng phím tắt
  *   + About popup: Thông tin ứng dụng, phiên bản, giấy phép
  * - Settings popup: Cấu hình kích thước canvas, màu nền, giao diện (theme), ngôn ngữ
+ * Các modal dùng Preact (PreactModal) — đã chuyển từ runtime JSX Real DOM cũ.
  */
 
-import { h } from "../ui/jsx";
-import { showPopup, showDropdown } from "../ui/Popup";
+import { h, render } from "preact";
+import { useState } from "preact/hooks";
+import { showDropdown } from "../ui/dropdown";
+import { PreactModal } from "../panels/common/gradient-panel";
 import { LayerManager, Layer, LayerType, TextDecoration } from "./layer";
 import { eventBus } from "./event-bus";
 
@@ -393,8 +398,30 @@ export class BarActions {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // 3. Topbar More Menu & Dialogs
+  // 3. Topbar More Menu & Dialogs (Preact modals)
   // ─────────────────────────────────────────────────────────────
+
+  /** Mount một PreactModal vào body; trả callback tự đóng qua build(close). */
+  private openPreactModal(
+    title: string,
+    width: string,
+    build: (close: () => void) => preact.ComponentChildren
+  ): void {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+
+    const close = () => {
+      render(null, host);
+      if (host.parentNode) host.parentNode.removeChild(host);
+    };
+
+    render(
+      <PreactModal title={title} width={width} onClose={close}>
+        {build(close)}
+      </PreactModal>,
+      host
+    );
+  }
 
   public openMoreMenu(triggerEl: HTMLElement): void {
     showDropdown(triggerEl, {
@@ -448,23 +475,78 @@ export class BarActions {
     });
   }
 
+  private fitCanvasToViewport(): void {
+    const canvasArea = document.getElementById("canvas-area");
+    const canvas = this.layerManager.mainCanvas;
+    if (canvasArea && canvas) {
+      const padding = 40;
+      const availW = canvasArea.clientWidth - padding;
+      const availH = canvasArea.clientHeight - padding;
+      const scale = Math.min(availW / canvas.width, availH / canvas.height, 1);
+      canvas.style.transform = `scale(${scale})`;
+      canvas.style.transformOrigin = "center center";
+    }
+  }
+
   public openViewModal(): void {
-    const fullscreenBtn = (
-      <button
-        type="button"
-        style={{
-          padding: "10px 16px",
-          background: "#1e1e1e",
-          border: "1px solid #555",
-          borderRadius: "6px",
-          color: "#fff",
-          cursor: "pointer",
-          fontSize: "13px",
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-        }}
-      >
+    this.openPreactModal("View Options", "360px", () => (
+      <ViewOptionsContent onFit={() => this.fitCanvasToViewport()} />
+    ));
+  }
+
+  public openShortcutsModal(): void {
+    this.openPreactModal("Keyboard Shortcuts", "480px", () => (
+      <ShortcutsContent />
+    ));
+  }
+
+  public openAboutModal(): void {
+    this.openPreactModal("About Pixorig", "420px", () => <AboutContent />);
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 4. Settings Popup
+  // ─────────────────────────────────────────────────────────────
+
+  public openSettingsModal(): void {
+    this.openPreactModal("Settings", "440px", (close) => (
+      <SettingsContent layerManager={this.layerManager} onClose={close} />
+    ));
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Preact modal contents
+// ─────────────────────────────────────────────────────────────
+
+function ViewOptionsContent(props: { onFit: () => void }) {
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  };
+
+  const btnStyle = {
+    padding: "10px 16px",
+    background: "#1e1e1e",
+    border: "1px solid #555",
+    borderRadius: "6px",
+    color: "#fff",
+    cursor: "pointer",
+    fontSize: "13px",
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+      <p style={{ color: "#aaa", fontSize: "13px", margin: "0 0 4px" }}>
+        Choose a viewport layout option:
+      </p>
+      <button type="button" style={btnStyle} onClick={toggleFullscreen}>
         <svg viewBox="0 0 24 24" width="16" height="16">
           <path
             fill="currentColor"
@@ -473,24 +555,7 @@ export class BarActions {
         </svg>
         <span>Toggle Fullscreen</span>
       </button>
-    ) as HTMLElement;
-
-    const fitViewBtn = (
-      <button
-        type="button"
-        style={{
-          padding: "10px 16px",
-          background: "#1e1e1e",
-          border: "1px solid #555",
-          borderRadius: "6px",
-          color: "#fff",
-          cursor: "pointer",
-          fontSize: "13px",
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-        }}
-      >
+      <button type="button" style={btnStyle} onClick={props.onFit}>
         <svg viewBox="0 0 24 24" width="16" height="16">
           <path
             fill="currentColor"
@@ -499,251 +564,246 @@ export class BarActions {
         </svg>
         <span>Fit Canvas to Viewport</span>
       </button>
-    ) as HTMLElement;
+    </div>
+  );
+}
 
-    fullscreenBtn.addEventListener("click", () => {
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(() => {});
-      } else {
-        document.exitFullscreen().catch(() => {});
-      }
-    });
+const SHORTCUTS: { key: string; desc: string }[] = [
+  { key: "Ctrl + Z", desc: "Undo action" },
+  { key: "Ctrl + Y / Ctrl + Shift + Z", desc: "Redo action" },
+  { key: "Delete / Backspace", desc: "Delete active layer" },
+  { key: "Ctrl + S", desc: "Save project (.trp)" },
+  { key: "Ctrl + O", desc: "Open project (.trp)" },
+  { key: "Escape", desc: "Deselect layer / Close modal" },
+  { key: "Arrow keys", desc: "Nudge active layer 1px" },
+  { key: "Shift + Arrow keys", desc: "Nudge active layer 10px" },
+];
 
-    fitViewBtn.addEventListener("click", () => {
-      const canvasArea = document.getElementById("canvas-area");
-      const canvas = this.layerManager.mainCanvas;
-      if (canvasArea && canvas) {
-        const padding = 40;
-        const availW = canvasArea.clientWidth - padding;
-        const availH = canvasArea.clientHeight - padding;
-        const scale = Math.min(availW / canvas.width, availH / canvas.height, 1);
-        canvas.style.transform = `scale(${scale})`;
-        canvas.style.transformOrigin = "center center";
-      }
-    });
-
-    const content = (
-      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-        <p style={{ color: "#aaa", fontSize: "13px", margin: "0 0 4px" }}>
-          Choose a viewport layout option:
-        </p>
-        {fullscreenBtn}
-        {fitViewBtn}
-      </div>
-    ) as HTMLElement;
-
-    showPopup({
-      title: "View Options",
-      width: "360px",
-      content,
-    });
-  }
-
-  public openShortcutsModal(): void {
-    const shortcuts = [
-      { key: "Ctrl + Z", desc: "Undo action" },
-      { key: "Ctrl + Y / Ctrl + Shift + Z", desc: "Redo action" },
-      { key: "Delete / Backspace", desc: "Delete active layer" },
-      { key: "Ctrl + S", desc: "Save project (.trp)" },
-      { key: "Ctrl + O", desc: "Open project (.trp)" },
-      { key: "Escape", desc: "Deselect layer / Close modal" },
-      { key: "Arrow keys", desc: "Nudge active layer 1px" },
-      { key: "Shift + Arrow keys", desc: "Nudge active layer 10px" },
-    ];
-
-    const rows = shortcuts.map((s) => (
-      <tr style={{ borderBottom: "1px solid #333" }}>
-        <td
-          style={{
-            padding: "8px 10px",
-            fontFamily: "monospace",
-            color: "#4da6ff",
-            fontSize: "13px",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {s.key}
-        </td>
-        <td style={{ padding: "8px 10px", color: "#ccc", fontSize: "13px" }}>
-          {s.desc}
-        </td>
-      </tr>
-    ));
-
-    const content = (
-      <div>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ borderBottom: "1px solid #444", textAlign: "left" }}>
-              <th style={{ padding: "8px 10px", color: "#888", fontSize: "12px" }}>
-                Shortcut
-              </th>
-              <th style={{ padding: "8px 10px", color: "#888", fontSize: "12px" }}>
-                Description
-              </th>
+function ShortcutsContent() {
+  return (
+    <div>
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <thead>
+          <tr style={{ borderBottom: "1px solid #444", textAlign: "left" }}>
+            <th style={{ padding: "8px 10px", color: "#888", fontSize: "12px" }}>
+              Shortcut
+            </th>
+            <th style={{ padding: "8px 10px", color: "#888", fontSize: "12px" }}>
+              Description
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {SHORTCUTS.map((s) => (
+            <tr style={{ borderBottom: "1px solid #333" }}>
+              <td
+                style={{
+                  padding: "8px 10px",
+                  fontFamily: "monospace",
+                  color: "#4da6ff",
+                  fontSize: "13px",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {s.key}
+              </td>
+              <td style={{ padding: "8px 10px", color: "#ccc", fontSize: "13px" }}>
+                {s.desc}
+              </td>
             </tr>
-          </thead>
-          <tbody>{rows}</tbody>
-        </table>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function AboutContent() {
+  return (
+    <div style={{ textAlign: "center", padding: "12px 0" }}>
+      <h2 style={{ fontSize: "22px", margin: "0 0 6px", color: "#fff" }}>Pixorig</h2>
+      <p style={{ color: "#aaa", margin: "0 0 16px", fontSize: "13px" }}>
+        Modern Browser-based Image &amp; Typography Editor
+      </p>
+      <p
+        style={{
+          color: "#ccc",
+          fontSize: "13px",
+          lineHeight: "1.6",
+          margin: "0 0 16px",
+          textAlign: "left",
+        }}
+      >
+        Pixorig is designed to deliver fast, local-first image and typography
+        manipulation with stacked canvas layers, real DOM rendering, and WASM
+        filters.
+      </p>
+      <div
+        style={{
+          background: "#181818",
+          borderRadius: "6px",
+          padding: "12px",
+          textAlign: "left",
+          fontSize: "12px",
+          color: "#999",
+          marginBottom: "16px",
+        }}
+      >
+        <p style={{ margin: "0 0 6px" }}>
+          <strong>Version:</strong> 2.0.0 (TypeScript / TSX Native)
+        </p>
+        <p style={{ margin: "0 0 6px" }}>
+          <strong>License:</strong> Apache License Version 2.0
+        </p>
+        <p style={{ margin: "0" }}>
+          <strong>Developer:</strong> Sao Tin Developers
+        </p>
       </div>
-    ) as HTMLElement;
+      <p style={{ color: "#888", fontSize: "13px", margin: "0" }}>
+        Have fun creating with Pixorig! :)
+      </p>
+    </div>
+  );
+}
 
-    showPopup({
-      title: "Keyboard Shortcuts",
-      width: "480px",
-      content,
-    });
-  }
+function SettingsContent(props: {
+  layerManager: LayerManager;
+  onClose: () => void;
+}) {
+  const canvas = props.layerManager.mainCanvas;
+  const currentW = canvas.width;
+  const currentH = canvas.height;
 
-  public openAboutModal(): void {
-    const content = (
-      <div style={{ textAlign: "center", padding: "12px 0" }}>
-        <h2 style={{ fontSize: "22px", margin: "0 0 6px", color: "#fff" }}>
-          Pixorig
-        </h2>
-        <p style={{ color: "#aaa", margin: "0 0 16px", fontSize: "13px" }}>
-          Modern Browser-based Image & Typography Editor
-        </p>
-        <p
-          style={{
-            color: "#ccc",
-            fontSize: "13px",
-            lineHeight: "1.6",
-            margin: "0 0 16px",
-            textAlign: "left",
-          }}
-        >
-          Pixorig is designed to deliver fast, local-first image and typography
-          manipulation with stacked canvas layers, real DOM rendering, and WASM
-          filters.
-        </p>
-        <div
-          style={{
-            background: "#181818",
-            borderRadius: "6px",
-            padding: "12px",
-            textAlign: "left",
-            fontSize: "12px",
-            color: "#999",
-            marginBottom: "16px",
-          }}
-        >
-          <p style={{ margin: "0 0 6px" }}>
-            <strong>Version:</strong> 2.0.0 (TypeScript / TSX Native)
-          </p>
-          <p style={{ margin: "0 0 6px" }}>
-            <strong>License:</strong> Apache License Version 2.0
-          </p>
-          <p style={{ margin: "0" }}>
-            <strong>Developer:</strong> Sao Tin Developers
-          </p>
+  const [width, setWidth] = useState(String(currentW));
+  const [height, setHeight] = useState(String(currentH));
+  const [theme, setTheme] = useState("dark");
+  const [lang, setLang] = useState("en");
+
+  const labelStyle = {
+    color: "#ccc",
+    fontSize: "13px",
+    display: "block",
+    marginBottom: "4px",
+  };
+
+  const handleSave = () => {
+    const newW = parseInt(width, 10);
+    const newH = parseInt(height, 10);
+    if (newW > 0 && newH > 0 && (newW !== currentW || newH !== currentH)) {
+      canvas.width = newW;
+      canvas.height = newH;
+      props.layerManager.resizeAllLayers(newW, newH);
+      props.layerManager.render();
+      eventBus.emit("canvas:resized", { width: newW, height: newH });
+    }
+
+    // Đổi theme
+    if (theme === "light") {
+      document.body.classList.add("theme-light");
+    } else {
+      document.body.classList.remove("theme-light");
+    }
+
+    props.onClose();
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+      <div>
+        <label style={labelStyle}>Canvas Size</label>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <input
+            type="number"
+            value={width}
+            min="1"
+            onInput={(e: Event) => setWidth((e.target as HTMLInputElement).value)}
+            style={{
+              flex: 1,
+              background: "#1e1e1e",
+              border: "1px solid #555",
+              borderRadius: "4px",
+              padding: "6px 8px",
+              color: "#e0e0e0",
+              fontSize: "13px",
+            }}
+          />
+          <span style={{ color: "#777" }}>×</span>
+          <input
+            type="number"
+            value={height}
+            min="1"
+            onInput={(e: Event) => setHeight((e.target as HTMLInputElement).value)}
+            style={{
+              flex: 1,
+              background: "#1e1e1e",
+              border: "1px solid #555",
+              borderRadius: "4px",
+              padding: "6px 8px",
+              color: "#e0e0e0",
+              fontSize: "13px",
+            }}
+          />
         </div>
-        <p style={{ color: "#888", fontSize: "13px", margin: "0" }}>
-          Have fun creating with Pixorig! :)
-        </p>
       </div>
-    ) as HTMLElement;
 
-    showPopup({
-      title: "About Pixorig",
-      width: "420px",
-      content,
-    });
-  }
+      <div>
+        <label style={labelStyle}>Canvas Background Color</label>
+        <input
+          type="color"
+          defaultValue="#1e1e1e"
+          style={{
+            width: "100%",
+            height: "36px",
+            background: "#1e1e1e",
+            border: "1px solid #555",
+            borderRadius: "4px",
+            cursor: "pointer",
+          }}
+        />
+      </div>
 
-  // ─────────────────────────────────────────────────────────────
-  // 4. Settings Popup
-  // ─────────────────────────────────────────────────────────────
+      <div>
+        <label style={labelStyle}>Theme</label>
+        <select
+          value={theme}
+          onChange={(e: Event) =>
+            setTheme((e.target as HTMLSelectElement).value)
+          }
+          style={{
+            width: "100%",
+            background: "#1e1e1e",
+            border: "1px solid #555",
+            borderRadius: "4px",
+            padding: "6px 8px",
+            color: "#e0e0e0",
+            fontSize: "13px",
+          }}
+        >
+          <option value="dark">Dark (default)</option>
+          <option value="light">Light</option>
+        </select>
+      </div>
 
-  public openSettingsModal(): void {
-    const canvas = this.layerManager.mainCanvas;
-    const currentW = canvas.width;
-    const currentH = canvas.height;
+      <div>
+        <label style={labelStyle}>Language</label>
+        <select
+          value={lang}
+          onChange={(e: Event) => setLang((e.target as HTMLSelectElement).value)}
+          style={{
+            width: "100%",
+            background: "#1e1e1e",
+            border: "1px solid #555",
+            borderRadius: "4px",
+            padding: "6px 8px",
+            color: "#e0e0e0",
+            fontSize: "13px",
+          }}
+        >
+          <option value="en">English</option>
+          <option value="vi">Tiếng Việt</option>
+        </select>
+      </div>
 
-    const widthInput = (
-      <input
-        type="number"
-        value={String(currentW)}
-        min="1"
-        style={{
-          flex: "1",
-          background: "#1e1e1e",
-          border: "1px solid #555",
-          borderRadius: "4px",
-          padding: "6px 8px",
-          color: "#e0e0e0",
-          fontSize: "13px",
-        }}
-      />
-    ) as HTMLInputElement;
-
-    const heightInput = (
-      <input
-        type="number"
-        value={String(currentH)}
-        min="1"
-        style={{
-          flex: "1",
-          background: "#1e1e1e",
-          border: "1px solid #555",
-          borderRadius: "4px",
-          padding: "6px 8px",
-          color: "#e0e0e0",
-          fontSize: "13px",
-        }}
-      />
-    ) as HTMLInputElement;
-
-    const bgColorInput = (
-      <input
-        type="color"
-        value="#1e1e1e"
-        style={{
-          width: "100%",
-          height: "36px",
-          background: "#1e1e1e",
-          border: "1px solid #555",
-          borderRadius: "4px",
-          cursor: "pointer",
-        }}
-      />
-    ) as HTMLInputElement;
-
-    const themeSelect = (
-      <select
-        style={{
-          width: "100%",
-          background: "#1e1e1e",
-          border: "1px solid #555",
-          borderRadius: "4px",
-          padding: "6px 8px",
-          color: "#e0e0e0",
-          fontSize: "13px",
-        }}
-      >
-        <option value="dark">Dark (default)</option>
-        <option value="light">Light</option>
-      </select>
-    ) as HTMLSelectElement;
-
-    const langSelect = (
-      <select
-        style={{
-          width: "100%",
-          background: "#1e1e1e",
-          border: "1px solid #555",
-          borderRadius: "4px",
-          padding: "6px 8px",
-          color: "#e0e0e0",
-          fontSize: "13px",
-        }}
-      >
-        <option value="en">English</option>
-        <option value="vi">Tiếng Việt</option>
-      </select>
-    ) as HTMLSelectElement;
-
-    const saveBtn = (
       <button
         type="button"
         style={{
@@ -757,102 +817,10 @@ export class BarActions {
           fontWeight: "600",
           alignSelf: "flex-end",
         }}
+        onClick={handleSave}
       >
         Save Settings
       </button>
-    ) as HTMLButtonElement;
-
-    const content = (
-      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-        <div>
-          <label
-            style={{
-              color: "#ccc",
-              fontSize: "13px",
-              display: "block",
-              marginBottom: "4px",
-            }}
-          >
-            Canvas Size
-          </label>
-          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-            {widthInput}
-            <span style={{ color: "#777" }}>×</span>
-            {heightInput}
-          </div>
-        </div>
-
-        <div>
-          <label
-            style={{
-              color: "#ccc",
-              fontSize: "13px",
-              display: "block",
-              marginBottom: "4px",
-            }}
-          >
-            Canvas Background Color
-          </label>
-          {bgColorInput}
-        </div>
-
-        <div>
-          <label
-            style={{
-              color: "#ccc",
-              fontSize: "13px",
-              display: "block",
-              marginBottom: "4px",
-            }}
-          >
-            Theme
-          </label>
-          {themeSelect}
-        </div>
-
-        <div>
-          <label
-            style={{
-              color: "#ccc",
-              fontSize: "13px",
-              display: "block",
-              marginBottom: "4px",
-            }}
-          >
-            Language
-          </label>
-          {langSelect}
-        </div>
-
-        {saveBtn}
-      </div>
-    ) as HTMLElement;
-
-    const popup = showPopup({
-      title: "Settings",
-      width: "440px",
-      content,
-    });
-
-    saveBtn.addEventListener("click", () => {
-      const newW = parseInt(widthInput.value, 10);
-      const newH = parseInt(heightInput.value, 10);
-      if (newW > 0 && newH > 0 && (newW !== currentW || newH !== currentH)) {
-        canvas.width = newW;
-        canvas.height = newH;
-        this.layerManager.resizeAllLayers(newW, newH);
-        this.layerManager.render();
-        eventBus.emit("canvas:resized", { width: newW, height: newH });
-      }
-
-      // Đổi theme
-      if (themeSelect.value === "light") {
-        document.body.classList.add("theme-light");
-      } else {
-        document.body.classList.remove("theme-light");
-      }
-
-      popup.close();
-    });
-  }
+    </div>
+  );
 }

@@ -7,7 +7,7 @@
 
 import { Layer, LayerManager, TextDecoration } from "../core/layer";
 import { eventBus } from "../core/event-bus";
-import { ColorModule } from "../modules/color";
+import { mountColorPanel } from "../panels/common/color-panel";
 import { mountTexturePanel } from "../panels/common/texture-panel";
 import { mountText3DRotatePanel } from "../panels/text/text-3d-rotate-panel";
 import { mountText3DPanel } from "../panels/text/text-3d-panel";
@@ -458,17 +458,35 @@ export class TextUIController {
   }
 
   openColorPanel(): void {
+    const textPropsGroup = document.querySelector(
+      '.sub-group[data-section="text-props"]'
+    ) as HTMLElement | null;
+    if (!textPropsGroup) return;
+
+    if (
+      !textPropsGroup.querySelector(".color-panel") &&
+      !textPropsGroup.querySelector(".preact-color-panel-wrapper")
+    ) {
+      textPropsGroup.dataset._savedInner = textPropsGroup.innerHTML;
+    }
+
     const active = this.getActiveTextLayer();
-    ColorModule.open(null, {
-      layerManager: this.layerManager,
-      targetLayer: active,
-      onColorChange: (newColor) => {
-        if (active) {
-          active.fontColor = newColor;
-          this.redrawAndSync(active);
-        }
+    mountColorPanel(
+      textPropsGroup,
+      {
+        layerManager: this.layerManager,
+        targetLayer: active,
+        onColorChange: (newColor) => {
+          if (active) {
+            active.fontColor = newColor;
+            this.redrawAndSync(active);
+          }
+        },
       },
-    });
+      () => {
+        this.restorePropsList(textPropsGroup);
+      }
+    );
   }
 
   openTexturePanel(): void {

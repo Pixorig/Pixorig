@@ -10,7 +10,7 @@ import {
 import { PreactPanelHeader } from "../../ui/base/panel-header";
 import { PreactTabBar } from "../../ui/base/tab-bar";
 import { SliderControlGroup } from "../../ui/base/slider-control-group";
-import { ColorModule } from "../../modules/color";
+import { mountColorPanel } from "../common/color-panel";
 
 export interface TextStrokePanelContext extends TextStrokeContext {
   layerManager?: LayerManager;
@@ -49,7 +49,7 @@ export function TextStrokePanel({
 
   const handleOpenColorPicker = () => {
     containerGroup.dataset._savedInner_stroke = containerGroup.innerHTML;
-    ColorModule.open(containerGroup, {
+    mountColorPanel(containerGroup, {
       layerManager: context.layerManager,
       onColorChange: (color) => {
         TextStrokeService.setColor(color, context);
@@ -59,7 +59,7 @@ export function TextStrokePanel({
       onClose: () => {
         onRefreshPanel();
       },
-    });
+    }, () => {});
   };
 
   const handleClearColor = () => {
