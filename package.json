@@ -13,9 +13,9 @@
     "vite": "^6.2.0"
   },
   "dependencies": {
-    "@warmjs/core": "^0.1.0",
-    "@warmjs/signals": "^0.1.0",
-    "@warmjs/ui": "^0.3.0",
+    "@warmjs/core": "^1.0.0",
+    "@warmjs/signals": "^1.0.0",
+    "@warmjs/ui": "^1.0.0",
     "lucide": "^1.24.0"
   }
 }
