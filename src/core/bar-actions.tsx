@@ -11,13 +11,12 @@
  *   + Shortcuts popup: Bảng phím tắt
  *   + About popup: Thông tin ứng dụng, phiên bản, giấy phép
  * - Settings popup: Cấu hình kích thước canvas, màu nền, giao diện (theme), ngôn ngữ
- * Các modal dùng Preact (PreactModal) — đã chuyển từ runtime JSX Real DOM cũ.
+ * Các modal dùng WarmJS (WarmModal).
  */
 
-import { h, render } from "preact";
-import { useState } from "preact/hooks";
 import { showDropdown } from "../ui/dropdown";
-import { PreactModal } from "../panels/common/gradient-panel";
+import { openWarmModal } from "@warmjs/ui";
+import { createSignal, createEffect } from "@warmjs/signals";
 import { LayerManager, Layer, LayerType, TextDecoration } from "./layer";
 import { eventBus } from "./event-bus";
 
@@ -398,29 +397,18 @@ export class BarActions {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // 3. Topbar More Menu & Dialogs (Preact modals)
+  // 3. Topbar More Menu & Dialogs (WarmJS modals)
   // ─────────────────────────────────────────────────────────────
 
-  /** Mount một PreactModal vào body; trả callback tự đóng qua build(close). */
-  private openPreactModal(
+  /** Mount một WarmJS modal vào body. */
+  private openWarmModal(
     title: string,
     width: string,
-    build: (close: () => void) => preact.ComponentChildren
+    build: (close: () => void) => HTMLElement
   ): void {
-    const host = document.createElement("div");
-    document.body.appendChild(host);
-
-    const close = () => {
-      render(null, host);
-      if (host.parentNode) host.parentNode.removeChild(host);
-    };
-
-    render(
-      <PreactModal title={title} width={width} onClose={close}>
-        {build(close)}
-      </PreactModal>,
-      host
-    );
+    openWarmModal({ title, width, onClose: () => {} }, (close, body) => {
+      body.appendChild(build(close));
+    });
   }
 
   public openMoreMenu(triggerEl: HTMLElement): void {
@@ -489,19 +477,164 @@ export class BarActions {
   }
 
   public openViewModal(): void {
-    this.openPreactModal("View Options", "360px", () => (
-      <ViewOptionsContent onFit={() => this.fitCanvasToViewport()} />
-    ));
+    this.openWarmModal("View Options", "360px", () => {
+      const root = document.createElement("div");
+      root.style.display = "flex";
+      root.style.flexDirection = "column";
+      root.style.gap = "12px";
+      const hint = document.createElement("p");
+      hint.style.color = "#aaa";
+      hint.style.fontSize = "13px";
+      hint.style.margin = "0 0 4px";
+      hint.textContent = "Choose a viewport layout option:";
+      const mkBtn = (svgPath: string, label: string, onClick: () => void): HTMLButtonElement => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.style.padding = "10px 16px";
+        b.style.background = "#1e1e1e";
+        b.style.border = "1px solid #555";
+        b.style.borderRadius = "6px";
+        b.style.color = "#fff";
+        b.style.cursor = "pointer";
+        b.style.fontSize = "13px";
+        b.style.display = "flex";
+        b.style.alignItems = "center";
+        b.style.gap = "8px";
+        const svgNS = "http://www.w3.org/2000/svg";
+        const svg = document.createElementNS(svgNS, "svg");
+        svg.setAttribute("viewBox", "0 0 24 24");
+        svg.setAttribute("width", "16");
+        svg.setAttribute("height", "16");
+        const p = document.createElementNS(svgNS, "path");
+        p.setAttribute("fill", "currentColor");
+        p.setAttribute("d", svgPath);
+        svg.appendChild(p);
+        const span = document.createElement("span");
+        span.textContent = label;
+        b.append(svg, span);
+        b.addEventListener("click", onClick);
+        return b;
+      };
+      const toggleFullscreen = () => {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        } else {
+          document.exitFullscreen().catch(() => {});
+        }
+      };
+      root.append(
+        hint,
+        mkBtn(
+          "M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z",
+          "Toggle Fullscreen",
+          toggleFullscreen
+        ),
+        mkBtn(
+          "M15 3l2.3 2.3-2.89 2.87 1.42 1.42L18.7 6.7 21 9V3h-6zM3 9l2.3-2.3 2.87 2.89 1.42-1.42L6.7 5.3 9 3H3v6zm6 12l-2.3-2.3 2.89-2.87-1.42-1.42L5.3 17.3 3 15v6h6zm12-6l-2.3 2.3-2.87-2.89-1.42 1.42 2.89 2.87L15 21h6v-6z",
+          "Fit Canvas to Viewport",
+          () => this.fitCanvasToViewport()
+        )
+      );
+      return root;
+    });
   }
 
   public openShortcutsModal(): void {
-    this.openPreactModal("Keyboard Shortcuts", "480px", () => (
-      <ShortcutsContent />
-    ));
+    this.openWarmModal("Keyboard Shortcuts", "480px", () => {
+      const root = document.createElement("div");
+      const table = document.createElement("table");
+      table.style.width = "100%";
+      table.style.borderCollapse = "collapse";
+      const thead = document.createElement("thead");
+      const headRow = document.createElement("tr");
+      headRow.style.borderBottom = "1px solid #444";
+      headRow.style.textAlign = "left";
+      for (const h of ["Shortcut", "Description"]) {
+        const th = document.createElement("th");
+        th.style.padding = "8px 10px";
+        th.style.color = "#888";
+        th.style.fontSize = "12px";
+        th.textContent = h;
+        headRow.appendChild(th);
+      }
+      thead.appendChild(headRow);
+      const tbody = document.createElement("tbody");
+      for (const s of SHORTCUTS) {
+        const tr = document.createElement("tr");
+        tr.style.borderBottom = "1px solid #333";
+        const key = document.createElement("td");
+        key.style.padding = "8px 10px";
+        key.style.fontFamily = "monospace";
+        key.style.color = "#4da6ff";
+        key.style.fontSize = "13px";
+        key.style.whiteSpace = "nowrap";
+        key.textContent = s.key;
+        const desc = document.createElement("td");
+        desc.style.padding = "8px 10px";
+        desc.style.color = "#ccc";
+        desc.style.fontSize = "13px";
+        desc.textContent = s.desc;
+        tr.append(key, desc);
+        tbody.appendChild(tr);
+      }
+      table.append(thead, tbody);
+      root.appendChild(table);
+      return root;
+    });
   }
 
   public openAboutModal(): void {
-    this.openPreactModal("About Pixorig", "420px", () => <AboutContent />);
+    this.openWarmModal("About Pixorig", "420px", () => {
+      const root = document.createElement("div");
+      root.style.textAlign = "center";
+      root.style.padding = "12px 0";
+      const h2 = document.createElement("h2");
+      h2.style.fontSize = "22px";
+      h2.style.margin = "0 0 6px";
+      h2.style.color = "#fff";
+      h2.textContent = "Pixorig";
+      const sub = document.createElement("p");
+      sub.style.color = "#aaa";
+      sub.style.margin = "0 0 16px";
+      sub.style.fontSize = "13px";
+      sub.textContent = "Modern Browser-based Image & Typography Editor";
+      const desc = document.createElement("p");
+      desc.style.color = "#ccc";
+      desc.style.fontSize = "13px";
+      desc.style.lineHeight = "1.6";
+      desc.style.margin = "0 0 16px";
+      desc.style.textAlign = "left";
+      desc.textContent =
+        "Pixorig is designed to deliver fast, local-first image and typography manipulation with stacked canvas layers, real DOM rendering, and WASM filters.";
+      const box = document.createElement("div");
+      box.style.background = "#181818";
+      box.style.borderRadius = "6px";
+      box.style.padding = "12px";
+      box.style.textAlign = "left";
+      box.style.fontSize = "12px";
+      box.style.color = "#999";
+      box.style.marginBottom = "16px";
+      const row = (label: string, value: string, last = false): HTMLElement => {
+        const p = document.createElement("p");
+        p.style.margin = last ? "0" : "0 0 6px";
+        const strong = document.createElement("strong");
+        strong.textContent = `${label}:`;
+        p.append(strong, document.createTextNode(` ${value}`));
+        return p;
+      };
+      box.append(
+        row("Version", "2.0.0 (TypeScript / TSX Native)"),
+        row("License", "Apache License Version 2.0"),
+        row("Developer", "Sao Tin Developers", true)
+      );
+      const foot = document.createElement("p");
+      foot.style.color = "#888";
+      foot.style.fontSize = "13px";
+      foot.style.margin = "0";
+      foot.textContent = "Have fun creating with Pixorig! :)";
+      root.append(h2, sub, desc, box, foot);
+      return root;
+    });
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -509,63 +642,156 @@ export class BarActions {
   // ─────────────────────────────────────────────────────────────
 
   public openSettingsModal(): void {
-    this.openPreactModal("Settings", "440px", (close) => (
-      <SettingsContent layerManager={this.layerManager} onClose={close} />
-    ));
+    this.openWarmModal("Settings", "440px", (close) => {
+      const layerManager = this.layerManager;
+      const canvas = layerManager.mainCanvas;
+      const currentW = canvas.width;
+      const currentH = canvas.height;
+
+      const [width, setWidth] = createSignal(String(currentW));
+      const [height, setHeight] = createSignal(String(currentH));
+      const [theme, setTheme] = createSignal("dark");
+      const [lang, setLang] = createSignal("en");
+
+      const root = document.createElement("div");
+      root.style.display = "flex";
+      root.style.flexDirection = "column";
+      root.style.gap = "16px";
+
+      const labelStyle = (el: HTMLElement): void => {
+        el.style.color = "#ccc";
+        el.style.fontSize = "13px";
+        el.style.display = "block";
+        el.style.marginBottom = "4px";
+      };
+      const inputStyle = (el: HTMLElement): void => {
+        el.style.background = "#1e1e1e";
+        el.style.border = "1px solid #555";
+        el.style.borderRadius = "4px";
+        el.style.padding = "6px 8px";
+        el.style.color = "#e0e0e0";
+        el.style.fontSize = "13px";
+      };
+
+      const sizeBlock = document.createElement("div");
+      const sizeLabel = document.createElement("label");
+      labelStyle(sizeLabel);
+      sizeLabel.textContent = "Canvas Size";
+      const sizeRow = document.createElement("div");
+      sizeRow.style.display = "flex";
+      sizeRow.style.gap = "8px";
+      sizeRow.style.alignItems = "center";
+      const wInput = document.createElement("input");
+      wInput.type = "number";
+      wInput.min = "1";
+      wInput.style.flex = "1";
+      inputStyle(wInput);
+      wInput.addEventListener("input", () => setWidth(wInput.value));
+      const times = document.createElement("span");
+      times.style.color = "#777";
+      times.textContent = "×";
+      const hInput = document.createElement("input");
+      hInput.type = "number";
+      hInput.min = "1";
+      hInput.style.flex = "1";
+      inputStyle(hInput);
+      hInput.addEventListener("input", () => setHeight(hInput.value));
+      sizeRow.append(wInput, times, hInput);
+      sizeBlock.append(sizeLabel, sizeRow);
+
+      const bgBlock = document.createElement("div");
+      const bgLabel = document.createElement("label");
+      labelStyle(bgLabel);
+      bgLabel.textContent = "Canvas Background Color";
+      const bgInput = document.createElement("input");
+      bgInput.type = "color";
+      bgInput.value = "#1e1e1e";
+      bgInput.style.width = "100%";
+      bgInput.style.height = "36px";
+      bgInput.style.background = "#1e1e1e";
+      bgInput.style.border = "1px solid #555";
+      bgInput.style.borderRadius = "4px";
+      bgInput.style.cursor = "pointer";
+      bgBlock.append(bgLabel, bgInput);
+
+      const mkSelect = (
+        label: string,
+        options: [string, string][],
+        get: () => string,
+        set: (v: string) => void
+      ): HTMLElement => {
+        const block = document.createElement("div");
+        const lab = document.createElement("label");
+        labelStyle(lab);
+        lab.textContent = label;
+        const sel = document.createElement("select");
+        sel.style.width = "100%";
+        sel.style.background = "#1e1e1e";
+        sel.style.border = "1px solid #555";
+        sel.style.borderRadius = "4px";
+        sel.style.padding = "6px 8px";
+        sel.style.color = "#e0e0e0";
+        sel.style.fontSize = "13px";
+        for (const [val, text] of options) {
+          const opt = document.createElement("option");
+          opt.value = val;
+          opt.textContent = text;
+          sel.appendChild(opt);
+        }
+        sel.addEventListener("change", () => set(sel.value));
+        createEffect(() => {
+          if (sel.value !== get()) sel.value = get();
+        });
+        block.append(lab, sel);
+        return block;
+      };
+
+      const saveBtn = document.createElement("button");
+      saveBtn.type = "button";
+      saveBtn.style.padding = "8px 16px";
+      saveBtn.style.background = "#094771";
+      saveBtn.style.color = "#fff";
+      saveBtn.style.border = "none";
+      saveBtn.style.borderRadius = "4px";
+      saveBtn.style.cursor = "pointer";
+      saveBtn.style.fontSize = "13px";
+      saveBtn.style.fontWeight = "600";
+      saveBtn.style.alignSelf = "flex-end";
+      saveBtn.textContent = "Save Settings";
+      saveBtn.addEventListener("click", () => {
+        const newW = parseInt(width(), 10);
+        const newH = parseInt(height(), 10);
+        if (newW > 0 && newH > 0 && (newW !== currentW || newH !== currentH)) {
+          canvas.width = newW;
+          canvas.height = newH;
+          layerManager.resizeAllLayers(newW, newH);
+          layerManager.render();
+          eventBus.emit("canvas:resized", { width: newW, height: newH });
+        }
+        if (theme() === "light") {
+          document.body.classList.add("theme-light");
+        } else {
+          document.body.classList.remove("theme-light");
+        }
+        close();
+      });
+
+      root.append(
+        sizeBlock,
+        bgBlock,
+        mkSelect("Theme", [["dark", "Dark (default)"], ["light", "Light"]], theme, setTheme),
+        mkSelect("Language", [["en", "English"], ["vi", "Tiếng Việt"]], lang, setLang),
+        saveBtn
+      );
+
+      createEffect(() => {
+        if (document.activeElement !== wInput) wInput.value = width();
+        if (document.activeElement !== hInput) hInput.value = height();
+      });
+
+      return root;
+    });
   }
-}
-
-// ─────────────────────────────────────────────────────────────
-// Preact modal contents
-// ─────────────────────────────────────────────────────────────
-
-function ViewOptionsContent(props: { onFit: () => void }) {
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    } else {
-      document.exitFullscreen().catch(() => {});
-    }
-  };
-
-  const btnStyle = {
-    padding: "10px 16px",
-    background: "#1e1e1e",
-    border: "1px solid #555",
-    borderRadius: "6px",
-    color: "#fff",
-    cursor: "pointer",
-    fontSize: "13px",
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-  };
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-      <p style={{ color: "#aaa", fontSize: "13px", margin: "0 0 4px" }}>
-        Choose a viewport layout option:
-      </p>
-      <button type="button" style={btnStyle} onClick={toggleFullscreen}>
-        <svg viewBox="0 0 24 24" width="16" height="16">
-          <path
-            fill="currentColor"
-            d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"
-          />
-        </svg>
-        <span>Toggle Fullscreen</span>
-      </button>
-      <button type="button" style={btnStyle} onClick={props.onFit}>
-        <svg viewBox="0 0 24 24" width="16" height="16">
-          <path
-            fill="currentColor"
-            d="M15 3l2.3 2.3-2.89 2.87 1.42 1.42L18.7 6.7 21 9V3h-6zM3 9l2.3-2.3 2.87 2.89 1.42-1.42L6.7 5.3 9 3H3v6zm6 12l-2.3-2.3 2.89-2.87-1.42-1.42L5.3 17.3 3 15v6h6zm12-6l-2.3 2.3-2.87-2.89-1.42 1.42 2.89 2.87L15 21h6v-6z"
-          />
-        </svg>
-        <span>Fit Canvas to Viewport</span>
-      </button>
-    </div>
-  );
 }
 
 const SHORTCUTS: { key: string; desc: string }[] = [
@@ -579,248 +805,3 @@ const SHORTCUTS: { key: string; desc: string }[] = [
   { key: "Shift + Arrow keys", desc: "Nudge active layer 10px" },
 ];
 
-function ShortcutsContent() {
-  return (
-    <div>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr style={{ borderBottom: "1px solid #444", textAlign: "left" }}>
-            <th style={{ padding: "8px 10px", color: "#888", fontSize: "12px" }}>
-              Shortcut
-            </th>
-            <th style={{ padding: "8px 10px", color: "#888", fontSize: "12px" }}>
-              Description
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {SHORTCUTS.map((s) => (
-            <tr style={{ borderBottom: "1px solid #333" }}>
-              <td
-                style={{
-                  padding: "8px 10px",
-                  fontFamily: "monospace",
-                  color: "#4da6ff",
-                  fontSize: "13px",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {s.key}
-              </td>
-              <td style={{ padding: "8px 10px", color: "#ccc", fontSize: "13px" }}>
-                {s.desc}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function AboutContent() {
-  return (
-    <div style={{ textAlign: "center", padding: "12px 0" }}>
-      <h2 style={{ fontSize: "22px", margin: "0 0 6px", color: "#fff" }}>Pixorig</h2>
-      <p style={{ color: "#aaa", margin: "0 0 16px", fontSize: "13px" }}>
-        Modern Browser-based Image &amp; Typography Editor
-      </p>
-      <p
-        style={{
-          color: "#ccc",
-          fontSize: "13px",
-          lineHeight: "1.6",
-          margin: "0 0 16px",
-          textAlign: "left",
-        }}
-      >
-        Pixorig is designed to deliver fast, local-first image and typography
-        manipulation with stacked canvas layers, real DOM rendering, and WASM
-        filters.
-      </p>
-      <div
-        style={{
-          background: "#181818",
-          borderRadius: "6px",
-          padding: "12px",
-          textAlign: "left",
-          fontSize: "12px",
-          color: "#999",
-          marginBottom: "16px",
-        }}
-      >
-        <p style={{ margin: "0 0 6px" }}>
-          <strong>Version:</strong> 2.0.0 (TypeScript / TSX Native)
-        </p>
-        <p style={{ margin: "0 0 6px" }}>
-          <strong>License:</strong> Apache License Version 2.0
-        </p>
-        <p style={{ margin: "0" }}>
-          <strong>Developer:</strong> Sao Tin Developers
-        </p>
-      </div>
-      <p style={{ color: "#888", fontSize: "13px", margin: "0" }}>
-        Have fun creating with Pixorig! :)
-      </p>
-    </div>
-  );
-}
-
-function SettingsContent(props: {
-  layerManager: LayerManager;
-  onClose: () => void;
-}) {
-  const canvas = props.layerManager.mainCanvas;
-  const currentW = canvas.width;
-  const currentH = canvas.height;
-
-  const [width, setWidth] = useState(String(currentW));
-  const [height, setHeight] = useState(String(currentH));
-  const [theme, setTheme] = useState("dark");
-  const [lang, setLang] = useState("en");
-
-  const labelStyle = {
-    color: "#ccc",
-    fontSize: "13px",
-    display: "block",
-    marginBottom: "4px",
-  };
-
-  const handleSave = () => {
-    const newW = parseInt(width, 10);
-    const newH = parseInt(height, 10);
-    if (newW > 0 && newH > 0 && (newW !== currentW || newH !== currentH)) {
-      canvas.width = newW;
-      canvas.height = newH;
-      props.layerManager.resizeAllLayers(newW, newH);
-      props.layerManager.render();
-      eventBus.emit("canvas:resized", { width: newW, height: newH });
-    }
-
-    // Đổi theme
-    if (theme === "light") {
-      document.body.classList.add("theme-light");
-    } else {
-      document.body.classList.remove("theme-light");
-    }
-
-    props.onClose();
-  };
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-      <div>
-        <label style={labelStyle}>Canvas Size</label>
-        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-          <input
-            type="number"
-            value={width}
-            min="1"
-            onInput={(e: Event) => setWidth((e.target as HTMLInputElement).value)}
-            style={{
-              flex: 1,
-              background: "#1e1e1e",
-              border: "1px solid #555",
-              borderRadius: "4px",
-              padding: "6px 8px",
-              color: "#e0e0e0",
-              fontSize: "13px",
-            }}
-          />
-          <span style={{ color: "#777" }}>×</span>
-          <input
-            type="number"
-            value={height}
-            min="1"
-            onInput={(e: Event) => setHeight((e.target as HTMLInputElement).value)}
-            style={{
-              flex: 1,
-              background: "#1e1e1e",
-              border: "1px solid #555",
-              borderRadius: "4px",
-              padding: "6px 8px",
-              color: "#e0e0e0",
-              fontSize: "13px",
-            }}
-          />
-        </div>
-      </div>
-
-      <div>
-        <label style={labelStyle}>Canvas Background Color</label>
-        <input
-          type="color"
-          defaultValue="#1e1e1e"
-          style={{
-            width: "100%",
-            height: "36px",
-            background: "#1e1e1e",
-            border: "1px solid #555",
-            borderRadius: "4px",
-            cursor: "pointer",
-          }}
-        />
-      </div>
-
-      <div>
-        <label style={labelStyle}>Theme</label>
-        <select
-          value={theme}
-          onChange={(e: Event) =>
-            setTheme((e.target as HTMLSelectElement).value)
-          }
-          style={{
-            width: "100%",
-            background: "#1e1e1e",
-            border: "1px solid #555",
-            borderRadius: "4px",
-            padding: "6px 8px",
-            color: "#e0e0e0",
-            fontSize: "13px",
-          }}
-        >
-          <option value="dark">Dark (default)</option>
-          <option value="light">Light</option>
-        </select>
-      </div>
-
-      <div>
-        <label style={labelStyle}>Language</label>
-        <select
-          value={lang}
-          onChange={(e: Event) => setLang((e.target as HTMLSelectElement).value)}
-          style={{
-            width: "100%",
-            background: "#1e1e1e",
-            border: "1px solid #555",
-            borderRadius: "4px",
-            padding: "6px 8px",
-            color: "#e0e0e0",
-            fontSize: "13px",
-          }}
-        >
-          <option value="en">English</option>
-          <option value="vi">Tiếng Việt</option>
-        </select>
-      </div>
-
-      <button
-        type="button"
-        style={{
-          padding: "8px 16px",
-          background: "#094771",
-          color: "#fff",
-          border: "none",
-          borderRadius: "4px",
-          cursor: "pointer",
-          fontSize: "13px",
-          fontWeight: "600",
-          alignSelf: "flex-end",
-        }}
-        onClick={handleSave}
-      >
-        Save Settings
-      </button>
-    </div>
-  );
-}

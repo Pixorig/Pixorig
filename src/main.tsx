@@ -1,27 +1,22 @@
-/** @jsx h */
-/** @jsxFrag Fragment */
-import { h } from "preact";
 import { LayerManager, Layer } from "./core/layer";
 import { TextTransform } from "./text/text-transform";
 import { TextHandler } from "./text/text";
 import { mountLayerListPanel } from "./ui/LayerList";
-import { ColorService } from "./core/layer/color-service";
-import { mountColorPanel } from "./panels/common/color-panel";
+import { ColorService, MONOCHROME_COLORS } from "./core/layer/color-service";
+import { mountWarmColorPanel } from "@warmjs/ui";
+import { openWarmCropPanel } from "@warmjs/ui";
+import { openWarmGradientPanel } from "@warmjs/ui";
+import { applyCustomGradient } from "./core/gradient-apply";
 import {
-  openCropPanel,
-  type CropPanelOptions,
-} from "./panels/common/crop-panel";
-import { openGradientPanel, type GradientModuleOptions } from "./panels/common/gradient-panel";
+  openWarmCameraModal,
+  openWarmUploadModal,
+  mountWarmSizePanel,
+} from "@warmjs/ui";
 import {
-  openCameraModal,
-  openUploadModal,
-  SizePanel,
+  loadIntoBackground,
   openTransparent,
-} from "./panels/common/background-subpanel";
-import { render } from "preact";
-import { mountCutoutPanel } from "./panels/common/cutout-panel";
-import { openImageUploadModal } from "./image/image-upload";
-import { openImageCameraModal } from "./image/image-camera";
+} from "./image/background-io";
+import { mountWarmCutoutPanel } from "@warmjs/ui";
 import { BarActions } from "./core/bar-actions";
 import { ImageTransform } from "./core/image-transform";
 import { eventBus } from "./core/event-bus";
@@ -42,25 +37,16 @@ if (canvas) {
   // Selection Box / Bounding Box cho image layer (di chuyển, resize, xoay)
   new ImageTransform(canvas, layerManager);
 
-  // Persistent preact host for the background Size panel
-  const sizePanelHost = document.createElement("div");
-
   const mountSizePanel = () => {
     const subSidebar = document.getElementById("sub-sidebar");
     if (!subSidebar) return;
 
     // Lưu nội dung hiện tại để Back khôi phục lại (giống bản modules cũ)
-    if (!subSidebar.querySelector(".size-panel")) {
+    if (!subSidebar.dataset._savedInner && !subSidebar.querySelector(".size-panel")) {
       subSidebar.dataset._savedInner = subSidebar.innerHTML;
     }
-    subSidebar.innerHTML = "";
-    subSidebar.appendChild(sizePanelHost);
 
     const restoreSubpanel = () => {
-      render(null, sizePanelHost);
-      if (sizePanelHost.parentNode) {
-        sizePanelHost.parentNode.removeChild(sizePanelHost);
-      }
       if (subSidebar.dataset._savedInner) {
         subSidebar.innerHTML = subSidebar.dataset._savedInner;
         delete subSidebar.dataset._savedInner;
@@ -68,23 +54,36 @@ if (canvas) {
       eventBus.emit("subsidebar:restored");
     };
 
-    render(
-      <SizePanel layerManager={layerManager} onBack={restoreSubpanel} />,
-      sizePanelHost
-    );
+    mountWarmSizePanel(subSidebar, {
+      initialWidth: layerManager.mainCanvas.width || 1200,
+      initialHeight: layerManager.mainCanvas.height || 600,
+      onApplySize: (newW, newH) => {
+        const canvas = layerManager.mainCanvas;
+        canvas.width = newW;
+        canvas.height = newH;
+        layerManager.resizeAllLayers(newW, newH);
+        layerManager.render();
+        eventBus.emit("canvas:resized", { width: newW, height: newH });
+      },
+      onBack: restoreSubpanel,
+    });
   };
 
   // Gradient custom popup listener
   eventBus.on("gradient:open-custom", (payload?: { targetLayer?: Layer; onApply?: (data: any) => void }) => {
-    openGradientPanel({
-      layerManager,
-      textTransform,
-      targetLayer: payload?.targetLayer,
-      onApply: payload?.onApply,
-    } as GradientModuleOptions);
+    openWarmGradientPanel({
+      onApply: (data) => {
+        applyCustomGradient(data, {
+          layerManager,
+          textTransform,
+          targetLayer: payload?.targetLayer,
+          onApply: payload?.onApply,
+        });
+      },
+    });
   });
 
-  // Setup Layer Sidebar (Preact)
+  // Setup Layer Sidebar
   const layerListContainer = document.getElementById("layer-list");
   if (layerListContainer) {
     mountLayerListPanel(layerListContainer, {
@@ -201,7 +200,10 @@ if (canvas) {
           ],
           onItemClick: (item) => {
             if (item.action === "add-image") {
-              openImageUploadModal(layerManager);
+              openWarmUploadModal({
+                title: "Add Image",
+                onImageLoaded: (img) => layerManager.createImageLayer(img),
+              });
             } else if (item.action === "add-text") {
               textHandler.createNewTextLayer();
             } else if (item.action === "add-date") {
@@ -302,56 +304,108 @@ if (canvas) {
     const subType = subItem.getAttribute("data-sub");
     if (subType === "bg-crop") {
       const bgLayer = layerManager.getBackgroundLayer();
-      openCropPanel({
-        layerManager,
-        sourceImage: bgLayer.image || null,
-      } as CropPanelOptions);
+      openWarmCropPanel({
+        srcImg: bgLayer.image || null,
+        onCropComplete: (croppedImg) => {
+          const sw = croppedImg.width;
+          const sh = croppedImg.height;
+          bgLayer.canvas.width = sw;
+          bgLayer.canvas.height = sh;
+          bgLayer.ctx.clearRect(0, 0, sw, sh);
+          bgLayer.ctx.drawImage(croppedImg, 0, 0);
+          bgLayer.image = croppedImg;
+          const mainCanvas = document.getElementById(
+            "canvas"
+          ) as HTMLCanvasElement | null;
+          if (mainCanvas) {
+            mainCanvas.width = sw;
+            mainCanvas.height = sh;
+          }
+          layerManager.render();
+          eventBus.emit("image:cropped", { image: croppedImg, width: sw, height: sh });
+        },
+      });
     } else if (subType === "bg-color") {
       const subSidebar = document.getElementById("sub-sidebar");
       const bgLayer = layerManager.getBackgroundLayer();
       if (subSidebar) {
-        if (!subSidebar.querySelector(".color-panel")) {
+        if (!subSidebar.dataset._savedInner && !subSidebar.querySelector(".color-panel")) {
           subSidebar.dataset._savedInner = subSidebar.innerHTML;
         }
-        mountColorPanel(subSidebar, {
-          layerManager,
-          targetLayer: bgLayer,
-        }, () => {
-          if (subSidebar.dataset._savedInner) {
-            subSidebar.innerHTML = subSidebar.dataset._savedInner;
-            delete subSidebar.dataset._savedInner;
-            eventBus.emit("subsidebar:restored");
-          }
+        const bgColorOpts = { layerManager, targetLayer: bgLayer };
+        mountWarmColorPanel(subSidebar, {
+          swatches: MONOCHROME_COLORS.map((c) => ({
+            name: c.name,
+            hex: c.hex,
+            light: ColorService.isLightColor(c.hex),
+          })),
+          presets: ColorService.getAllPresets().map((g) => ({
+            name: g.name,
+            css: ColorService.presetToCss(g),
+          })),
+          onPickColor: (hex) => ColorService.applyColor(hex, bgColorOpts),
+          onPickGradient: (i) =>
+            ColorService.applyGradient(ColorService.getAllPresets()[i], bgColorOpts),
+          onCustomGradient: () => {
+            eventBus.emit("gradient:open-custom", { targetLayer: bgLayer });
+          },
+          onBack: () => {
+            if (subSidebar.dataset._savedInner) {
+              subSidebar.innerHTML = subSidebar.dataset._savedInner;
+              delete subSidebar.dataset._savedInner;
+              eventBus.emit("subsidebar:restored");
+            }
+          },
         });
       }
     } else if (subType === "bg-from-camera") {
-      openCameraModal({ layerManager });
+      openWarmCameraModal({
+        title: "Capture from Camera",
+        onImageLoaded: (img) => loadIntoBackground(layerManager, img),
+      });
     } else if (subType === "bg-from-upload") {
-      openUploadModal({ layerManager });
+      openWarmUploadModal({
+        title: "Upload Image",
+        onImageLoaded: (img) => loadIntoBackground(layerManager, img),
+      });
     } else if (subType === "bg-size") {
       mountSizePanel();
     } else if (subType === "bg-transparent") {
       openTransparent(layerManager);
-    } else if (subType === "img-cutout") {
-      const imgGroup = document.querySelector('.sub-group[data-section="image"]') as HTMLElement;
+      } else if (subType === "img-cutout") {
+      // FIX bug gốc: nút Cutout nằm trong group image-props ĐANG HIỆN,
+      // bản cũ mount nhầm vào group "image" đang ẩn nên bấm không thấy gì.
+      // Mount vào đúng group chứa nút bấm.
+      const hostGroup =
+        (subItem.closest(".sub-group") as HTMLElement | null) ??
+        (document.querySelector('.sub-group[data-section="image-props"]') as HTMLElement | null);
+      const imgGroup = hostGroup;
       if (imgGroup) {
-        if (
-          !imgGroup.querySelector(".cutout-panel") &&
-          !imgGroup.querySelector(".preact-cutout-panel-wrapper")
+        if (!imgGroup.dataset._savedInner && !imgGroup.querySelector(".cutout-panel") &&
+          
+          !imgGroup.querySelector(".warm-cutout-panel-wrapper")
         ) {
           imgGroup.dataset._savedInner = imgGroup.innerHTML;
         }
-        mountCutoutPanel(imgGroup, { layerManager }, () => {
-          if (imgGroup.dataset._savedInner) {
-            imgGroup.innerHTML = imgGroup.dataset._savedInner;
-            delete imgGroup.dataset._savedInner;
-          }
+        mountWarmCutoutPanel(imgGroup, {
+          onBack: () => {
+            if (imgGroup.dataset._savedInner) {
+              imgGroup.innerHTML = imgGroup.dataset._savedInner;
+              delete imgGroup.dataset._savedInner;
+            }
+          },
         });
       }
     } else if (subType === "img-from-upload") {
-      openImageUploadModal(layerManager);
+      openWarmUploadModal({
+        title: "Add Image",
+        onImageLoaded: (img) => layerManager.createImageLayer(img),
+      });
     } else if (subType === "img-from-camera") {
-      openImageCameraModal(layerManager);
+      openWarmCameraModal({
+        title: "Capture from Camera",
+        onImageLoaded: (img) => layerManager.createImageLayer(img),
+      });
     }
   });
 
@@ -423,3 +477,9 @@ if (canvas) {
 
   initDefaultCanvas();
 }
+
+
+
+
+
+

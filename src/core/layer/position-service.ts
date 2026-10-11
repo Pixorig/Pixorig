@@ -42,6 +42,33 @@ export class PositionService {
       }
       const textWidth = maxLineWidth;
 
+      // Chiều cao KHỐI chữ (mirror Layer.drawText: baseline dòng đầu ở y,
+      // các dòng sau ở y + i*lineHeight, textBaseline mặc định "alphabetic").
+      const fs =
+        typeof layer.fontSize === "number" && isFinite(layer.fontSize)
+          ? layer.fontSize
+          : 48;
+      const textLines = String(layer.text ?? "").split("\n");
+      const textLineHeight = Math.round(fs * 1.2 + (layer.lineSpacing || 0));
+      let textAscent = 0;
+      let textDescent = 0;
+      for (const ln of textLines) {
+        const m = ctx.measureText(ln || " ");
+        const a =
+          typeof m.actualBoundingBoxAscent === "number"
+            ? m.actualBoundingBoxAscent
+            : fs * 0.8;
+        const d =
+          typeof m.actualBoundingBoxDescent === "number"
+            ? m.actualBoundingBoxDescent
+            : fs * 0.2;
+        if (a > textAscent) textAscent = a;
+        if (d > textDescent) textDescent = d;
+      }
+      // Block spans (y - ascent) .. (y + (n-1)*lineHeight + descent)
+      const textBlockH =
+        textAscent + (textLines.length - 1) * textLineHeight + textDescent;
+
       switch (type) {
         case "left":
           layer.x = 0;
@@ -59,13 +86,14 @@ export class PositionService {
           else if (layer.textAlign === "center") layer.x -= textWidth / 2;
           break;
         case "top":
-          layer.y = layer.fontSize;
+          layer.y = textAscent;
           break;
         case "center-v":
-          layer.y = (H + layer.fontSize) / 2;
+          layer.y = (H - textBlockH) / 2 + textAscent;
           break;
         case "bottom":
-          layer.y = H - 10;
+          layer.y =
+            H - textDescent - (textLines.length - 1) * textLineHeight;
           break;
       }
 

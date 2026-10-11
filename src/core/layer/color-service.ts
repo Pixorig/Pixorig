@@ -135,6 +135,32 @@ class ColorServiceImpl {
     return [...this.customPresets, ...BUILT_IN_PRESETS];
   }
 
+  /** CSS background value for a preset swatch (moved from ColorPanel so WarmJS hosts can reuse it). */
+  presetToCss(g: PresetGradientItem): string {
+    if (g.isCustom && g.data) {
+      if (g.data.type === "linear") {
+        const dx = g.data.endPoint.x - g.data.startPoint.x;
+        const dy = g.data.endPoint.y - g.data.startPoint.y;
+        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+        const cssAngle = angle + 90;
+        const stopStrs = g.data.stops
+          .map((s: any) => `${s.color} ${Math.round(s.offset * 100)}%`)
+          .join(", ");
+        return `linear-gradient(${Math.round(cssAngle)}deg, ${stopStrs})`;
+      } else if (Array.isArray(g.data.meshPoints)) {
+        const bgImages = g.data.meshPoints.map((p: any) => {
+          const x = Math.round(p.x * 100);
+          const y = Math.round(p.y * 100);
+          const r = Math.round((p.radius !== undefined ? p.radius : 1.0) * 80);
+          return `radial-gradient(circle at ${x}% ${y}%, ${p.color} 0%, transparent ${r}%)`;
+        });
+        return bgImages.join(", ");
+      }
+    }
+    const dir = g.colors.length > 2 ? "135deg" : "to right";
+    return `linear-gradient(${dir}, ${g.colors.join(", ")})`;
+  }
+
   addGradientPreset(gradData: any, name?: string): void {
     this.customPresets.unshift({
       name: name || "Custom",

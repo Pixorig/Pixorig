@@ -11,8 +11,12 @@
  *   Shift + Arrow = 10px)
  */
 
-import { Layer, LayerManager } from "./layer";
+import { Layer, LayerManager, LayerMoveStart } from "./layer";
 import { eventBus } from "./event-bus";
+import {
+  isPointObscuredByOtherType,
+  registerLayerGeometry,
+} from "./layer-geometry";
 
 export type ImageHandleId =
   | "nw"
@@ -55,6 +59,10 @@ export class ImageTransform {
   selectedLayer: Layer | null = null;
 
   private drag: DragState | null = null;
+  /** Vị trí các layer trong nhóm chọn khi bắt đầu kéo nhiều layer. */
+  private multiDrag: LayerMoveStart[] | null = null;
+  /** Layer vừa bấm trong nhóm chọn — click (không kéo) sẽ thu nhóm về layer này. */
+  private groupClickCandidate: Layer | null = null;
   private lastShift = false;
 
   private boundPointerDown: (e: PointerEvent) => void;
@@ -74,6 +82,7 @@ export class ImageTransform {
 
     this.initEventListeners();
     this.initEventBus();
+    this.registerSharedHitTester();
 
     (window as unknown as { imageTransform?: ImageTransform }).imageTransform =
       this;
@@ -107,6 +116,25 @@ export class ImageTransform {
       }
     });
 
+    // Chọn layer ở nơi khác (layer list, click canvas, Ctrl + click) → đồng bộ
+    // layer image đang chọn, tránh trạng thái chọn cũ còn sót lại.
+    const unsubSelected = eventBus.on<Layer>("layer:selected", (layer) => {
+      const next = layer && layer.type === "image" ? layer : null;
+      if (next === this.selectedLayer) return;
+      this.selectedLayer = next;
+    });
+
+    // Bỏ chọn nhóm (vd: sau khi xoá nhiều layer)
+    const unsubSelectionCleared = eventBus.on(
+      "layer:selection-changed",
+      (payload?: { ids?: number[] }) => {
+        if (payload && payload.ids && payload.ids.length > 0) return;
+        this.selectedLayer = null;
+        this.drag = null;
+        this.multiDrag = null;
+      }
+    );
+
     const unsubResized = eventBus.on("canvas:resized", () => {
       if (this.selectedLayer) {
         this.layerManager.render();
@@ -114,7 +142,35 @@ export class ImageTransform {
       }
     });
 
-    this.unsubscribers.push(unsubChanged, unsubResized);
+    this.unsubscribers.push(
+      unsubChanged,
+      unsubResized,
+      unsubSelected,
+      unsubSelectionCleared
+    );
+  }
+
+  /**
+   * Chia sẻ hình học của image layer cho các module tương tác khác
+   * (xem `layer-geometry.ts`) để biết layer nào nằm trên cùng tại một điểm.
+   */
+  private registerSharedHitTester(): void {
+    const unregister = registerLayerGeometry("image", {
+      hit: (layer, x, y) => {
+        const bounds = this.getImageLayerBounds(layer);
+        if (
+          x < bounds.x ||
+          x > bounds.x + bounds.width ||
+          y < bounds.y ||
+          y > bounds.y + bounds.height
+        ) {
+          return false;
+        }
+        return this.isPointOnImagePixels(layer, x, y);
+      },
+      bounds: (layer) => this.getImageLayerBounds(layer),
+    });
+    this.unsubscribers.push(unregister);
   }
 
   destroy(): void {
@@ -303,23 +359,56 @@ export class ImageTransform {
     if (e.button !== 0) return;
     const pos = this.getMousePos(e);
 
-    // 1. Handle của layer đang chọn?
-    if (this.selectedLayer) {
+    // 0. Ctrl/Cmd + click: thêm/bớt layer khỏi nhóm chọn (không kéo)
+    if (e.ctrlKey || e.metaKey) {
+      this.toggleSelectionAt(pos.x, pos.y);
+      return;
+    }
+
+    // 1. Handle của layer đang chọn? (nhường cho layer khác loại nằm trên nếu
+    //    layer đó che mất handle — thao tác thuộc về layer trên cùng). Khi chọn
+    //    nhiều layer thì không bật handle vì resize/xoay chỉ áp dụng cho 1 layer.
+    if (this.selectedLayer && !this.isMultiSelection()) {
       const handle = this.findHandleAt(pos.x, pos.y, this.selectedLayer);
-      if (handle) {
+      if (
+        handle &&
+        !isPointObscuredByOtherType(
+          this.layerManager,
+          this.selectedLayer,
+          pos.x,
+          pos.y
+        )
+      ) {
         this.beginDrag(handle, pos);
         return;
       }
     }
 
-    // 2. Click vào ảnh?
+    // 2. Click vào ảnh? Chỉ nhận khi không có layer khác loại (text) nằm trên
+    //    tại điểm click, nếu không cả hai layer sẽ cùng bị kéo.
     const hit = this.findImageLayerAt(pos.x, pos.y);
     if (hit) {
-      if (
+      const isSelectedImage =
         this.selectedLayer?.id === hit.layer.id ||
-        this.isPointOnImagePixels(hit.layer, pos.x, pos.y)
-      ) {
-        this.selectLayer(hit.layer);
+        this.layerManager.isLayerSelected(hit.layer.id);
+      const canGrab =
+        (isSelectedImage ||
+          this.isPointOnImagePixels(hit.layer, pos.x, pos.y)) &&
+        !isPointObscuredByOtherType(
+          this.layerManager,
+          hit.layer,
+          pos.x,
+          pos.y
+        );
+      if (canGrab) {
+        if (this.isLayerInGroup(hit.layer)) {
+          // Layer đang nằm trong nhóm chọn → kéo cả nhóm, giữ nguyên nhóm chọn.
+          // Vẫn cần gán selectedLayer cho thao tác kéo nhưng KHÔNG đổi nhóm chọn.
+          this.selectedLayer = hit.layer;
+          this.groupClickCandidate = hit.layer;
+        } else {
+          this.selectLayer(hit.layer);
+        }
         this.beginDrag("move", pos);
         return;
       }
@@ -327,6 +416,43 @@ export class ImageTransform {
 
     // 3. Click ra ngoài → bỏ chọn
     this.deselect();
+    this.layerManager.clearLayerSelection();
+  }
+
+  /** Nhóm chọn đang có từ 2 layer trở lên. */
+  private isMultiSelection(): boolean {
+    return this.layerManager.getSelectedLayers().length > 1;
+  }
+
+  /** Layer có nằm trong nhóm chọn nhiều (và nhóm có thể kéo được) không? */
+  private isLayerInGroup(layer: Layer): boolean {
+    return (
+      this.layerManager.isLayerSelected(layer.id) &&
+      this.layerManager.getMovableSelectedLayers().length > 1
+    );
+  }
+
+  /** Ctrl/Cmd + click lên canvas: thêm/bớt layer khỏi nhóm chọn. */
+  private toggleSelectionAt(x: number, y: number): void {
+    const hit = this.findImageLayerAt(x, y);
+    if (!hit) return; // không trúng image → để TextTransform xử lý ctrl + click
+    if (!this.isPointOnImagePixels(hit.layer, x, y)) return;
+    if (isPointObscuredByOtherType(this.layerManager, hit.layer, x, y)) return;
+
+    this.layerManager.toggleLayerSelection(hit.layer.id);
+    this.refreshSelectionOverlay();
+  }
+
+  /** Vẽ lại overlay theo trạng thái chọn hiện tại (1 layer hay nhiều layer). */
+  private refreshSelectionOverlay(): void {
+    const selected = this.layerManager.getSelectedLayers();
+    if (selected.length > 1) {
+      this.layerManager.drawSelectionOutlines();
+      return;
+    }
+    const only = selected[0];
+    if (only && only.type === "image") this.drawSelectionOverlay(only);
+    else this.layerManager.drawSelectionOutlines();
   }
 
   private beginDrag(
@@ -358,6 +484,12 @@ export class ImageTransform {
       },
     };
 
+    // Kéo layer đang nằm trong nhóm chọn → kéo cả nhóm theo cùng delta
+    this.multiDrag =
+      this.drag.mode === "move" && this.isMultiSelection()
+        ? this.layerManager.captureSelectionPositions()
+        : null;
+
     this.canvas.style.cursor = this.cursorForHandle(handle);
   }
 
@@ -386,7 +518,7 @@ export class ImageTransform {
   }
 
   private computeHoverCursor(x: number, y: number): string {
-    if (this.selectedLayer) {
+    if (this.selectedLayer && !this.isMultiSelection()) {
       const handle = this.findHandleAt(x, y, this.selectedLayer);
       if (handle) return this.cursorForHandle(handle);
     }
@@ -426,6 +558,15 @@ export class ImageTransform {
     if (drag.mode === "move") {
       const dx = pos.x - drag.startMouse.x;
       const dy = pos.y - drag.startMouse.y;
+
+      if (this.multiDrag) {
+        // Kéo nhóm: dịch chuyển mọi layer đang chọn theo cùng delta
+        if (dx !== 0 || dy !== 0) this.groupClickCandidate = null;
+        this.layerManager.applySelectionPositions(this.multiDrag, dx, dy);
+        this.layerManager.drawSelectionOutlines();
+        return;
+      }
+
       layer.x = Math.round(start.x + dx);
       layer.y = Math.round(start.y + dy);
       layer.imgRotation = start.rotation;
@@ -508,8 +649,13 @@ export class ImageTransform {
   private handlePointerUp(e: PointerEvent): void {
     void e;
     if (this.drag) {
+      const candidate = this.groupClickCandidate;
       this.drag = null;
+      this.multiDrag = null;
+      this.groupClickCandidate = null;
       this.canvas.style.cursor = "default";
+      // Bấm (không kéo) vào layer trong nhóm chọn → thu nhóm về đúng layer đó
+      if (candidate) this.selectLayer(candidate);
       if (this.selectedLayer) {
         eventBus.emit("image:transformed", { layer: this.selectedLayer });
         // Cho phép undo/redo ghi nhận thay đổi sau khi kết thúc thao tác kéo
@@ -641,8 +787,6 @@ export class ImageTransform {
   private handleKeyDown(e: KeyboardEvent): void {
     this.lastShift = e.shiftKey;
 
-    if (!this.selectedLayer || this.selectedLayer.type !== "image") return;
-
     const active = document.activeElement;
     const tag = active ? active.tagName : "";
     if (
@@ -652,6 +796,37 @@ export class ImageTransform {
     ) {
       return;
     }
+
+    // Chọn nhiều layer → mũi tên / Delete tác động lên cả nhóm.
+    // (TextTransform nhường phần này để mỗi phím chỉ được xử lý một lần.)
+    if (this.layerManager.getMovableSelectedLayers().length > 1) {
+      if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        this.layerManager.deleteSelectedLayers();
+        return;
+      }
+      if (e.key === "Escape") {
+        this.layerManager.clearLayerSelection();
+        return;
+      }
+      const step = e.shiftKey ? 10 : 1;
+      const deltas: Record<string, [number, number]> = {
+        ArrowLeft: [-step, 0],
+        ArrowRight: [step, 0],
+        ArrowUp: [0, -step],
+        ArrowDown: [0, step],
+      };
+      const delta = deltas[e.key];
+      if (delta) {
+        e.preventDefault();
+        this.layerManager.moveSelectedLayers(delta[0], delta[1]);
+        this.layerManager.drawSelectionOutlines();
+        eventBus.emit("layer:changed", this.layerManager.getLayersList());
+      }
+      return;
+    }
+
+    if (!this.selectedLayer || this.selectedLayer.type !== "image") return;
 
     const layer = this.selectedLayer;
 

@@ -1,15 +1,15 @@
 # Pixorig
 
-**Pixorig** is a browser-based image editing tool that runs entirely on the frontend. Built with TypeScript, Vite, Preact, and WebAssembly (WASM) — no heavy frameworks like React, Vue, or Angular. UI panels are lightweight Preact components.
+**Pixorig** is a browser-based image editing tool that runs entirely on the frontend. Built with TypeScript, Vite, [WarmJS](https://github.com/warmjs), and WebAssembly (WASM) — no heavy frameworks like React, Vue, or Angular. All UI panels are lightweight WarmJS components with fine-grained reactivity and zero virtual DOM.
 
 ## Features
 
 - **Pure frontend** — All processing happens in the browser. No server-side dependencies.
-- **TypeScript + Preact** — Type-safe codebase with Preact (`h` / `Fragment`) for UI panels — minimal footprint, no full React.
+- **TypeScript + WarmJS** — Type-safe codebase with a self-owned UI runtime: direct-DOM rendering plus signals, minimal footprint, no framework lock-in.
 - **WebAssembly (WASM)** — High-performance image processing via C/C++ compiled to WASM.
 - **Layer system** — Multi-layer canvas with z-ordering, opacity, lock, visibility, and drag-to-reorder.
 - **Text editing** — Rich text layers with font family, size, weight, style, color, gradient, mesh fill, texture fill, curve bend, padding, and text alignment.
-- **Panels** — Color picker, Gradient, Texture, Opacity, Crop, Rotate, Curve, Relative Position, Cutout, Background sub-panel (Size/Color/Upload/Camera/Transparent).
+- **Panels** — Color picker, Gradient editor, Texture, Opacity, Crop, Rotate, Curve, Relative Position, Cutout, Shadow/3D panels, Background tools (Size/Color/Upload/Camera/Transparent).
 - **Auto deploy** — GitHub Actions workflow builds and deploys to GitHub Pages on every push.
 
 ## Comparison with Other Tools
@@ -25,9 +25,16 @@
 
 - **TypeScript** — Strict mode, ESNext target
 - **Vite** — Dev server with HMR, production bundling
-- **Custom JSX runtime** — Preact `h()` / `Fragment` for UI panels
+- **[WarmJS](https://github.com/warmjs)** — Self-owned UI runtime (direct DOM + signals, no virtual DOM, zero dependencies)
+  - [`@warmjs/core`](https://www.npmjs.com/package/@warmjs/core) — Tiny JSX-to-DOM runtime
+  - [`@warmjs/signals`](https://www.npmjs.com/package/@warmjs/signals) — Fine-grained reactivity (signals, effects, shared reset scopes)
+  - [`@warmjs/ui`](https://www.npmjs.com/package/@warmjs/ui) — Panel primitives (header, slider, tabs, toggle, knob, color, modals) and ready-made editor panels
 - **WebAssembly (WASM)** — C/C++ image processing modules
 - **GitHub Actions** — CI/CD auto deploy to GitHub Pages
+
+### Why WarmJS?
+
+Pixorig's UI is a thin shell over a canvas core: sliders, headers, tabs, toggles, and popups. A full virtual-DOM framework re-renders whole subtrees on every keystroke or slider tick; WarmJS updates only the exact DOM node bound to a signal. That keeps 60fps slider drags cheap on low-end phones, shrinks the production bundle, and — because the runtime is owned by the project (~300 lines, auditable) — removes third-party UI risk from the critical path entirely.
 
 ## Getting Started
 
@@ -56,24 +63,20 @@ Pixorig/
 │   ├── main.tsx            # App bootstrap & sidebar/event wiring
 │   ├── core/
 │   │   ├── layer.ts        # Layer & LayerManager (multi-layer canvas)
-│   │   ├── bar-actions.tsx  # Sidebar & toolbar actions
+│   │   ├── layer/          # Layer services (color, opacity, rotate, ...)
+│   │   ├── text/           # Text effect services (shadow, 3D, curve, ...)
+│   │   ├── bar-actions.tsx  # Topbar actions, undo/redo, project I/O, modals
 │   │   ├── event-bus.ts    # Global event bus
+│   │   ├── gradient-apply.ts # Custom gradient application logic
 │   │   └── wasm-filter.ts  # WASM filter bindings
 │   ├── text/
-│   │   ├── text.tsx        # Text UI controller & property panels
+│   │   ├── text.tsx        # Text UI controller (wires WarmJS panels to services)
 │   │   └── text-transform.ts # Canvas text rendering, selection, curve
 │   ├── image/
-│   │   ├── image-upload.tsx  # Add Image modal (file / URL)
-│   │   └── image-camera.tsx  # Capture from Camera modal
-│   ├── panels/
-│   │   ├── common/         # Color, Gradient, Texture, Opacity, Crop,
-│   │   │                   # Rotate, Curve, Relative Position, Cutout,
-│   │   │                   # Background sub-panel + shared PreactModal
-│   │   └── text/           # Text property panels (shadow, stroke, 3D, ...)
+│   │   └── background-io.ts # Background image load / transparent helpers
 │   └── ui/
 │       ├── dropdown.ts     # Dropdown menu (real DOM)
-│       ├── LayerList.tsx   # Layer list panel (Preact)
-│       └── base/           # Shared Preact UI (panel-header, tab-bar, slider)
+│       └── LayerList.tsx   # Layer list panel (WarmJS signals)
 ├── wasm/                   # WebAssembly modules (C/C++ source & compiled)
 ├── cpp/                    # C/C++ source for WASM compilation
 ├── font/                   # Custom font assets
@@ -84,6 +87,8 @@ Pixorig/
     └── workflows/
         └── deploy.yml      # GitHub Actions: build & deploy to Pages
 ```
+
+UI panels themselves live in [WarmJS](https://github.com/warmjs) (`@warmjs/ui`); Pixorig keeps only the canvas core, services, and thin wiring callbacks.
 
 ## Deployment
 

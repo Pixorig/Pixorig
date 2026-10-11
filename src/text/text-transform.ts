@@ -3,9 +3,14 @@
  * Handles hit-testing, dragging, font resizing, rotating, and in-place canvas editing
  */
 
-import { Layer, LayerManager } from "../core/layer";
+import { Layer, LayerManager, LayerMoveStart } from "../core/layer";
 import { eventBus } from "../core/event-bus";
 import { ColorService } from "../core/layer/color-service";
+import {
+  isPointObscuredByOtherType,
+  isPointOnLayer,
+  registerLayerGeometry,
+} from "../core/layer-geometry";
 
 export interface TextBounds {
   x: number;
@@ -106,6 +111,10 @@ export class TextTransform {
   editorEl: HTMLTextAreaElement | null = null;
   editingLayer: Layer | null = null;
   editingOriginalText = "";
+  /** Vị trí các layer trong nhóm chọn khi bắt đầu kéo nhiều layer. */
+  private multiDrag: LayerMoveStart[] | null = null;
+  /** Layer vừa bấm trong nhóm chọn — click (không kéo) sẽ thu nhóm về layer này. */
+  private groupClickCandidate: Layer | null = null;
 
   // Perspective mode state
   isPerspectiveMode = false;
@@ -134,6 +143,7 @@ export class TextTransform {
 
     this.initEventListeners();
     this.initEventBus();
+    this.registerSharedHitTester();
 
     // Expose to window for backwards compatibility if needed
     (window as unknown as { textTransform?: TextTransform }).textTransform = this;
@@ -174,6 +184,36 @@ export class TextTransform {
     });
 
     this.unsubscribers.push(unsubSelect, unsubRedraw);
+  }
+
+  /**
+   * Chia sẻ hình học của text layer cho các module tương tác khác
+   * (xem `layer-geometry.ts`) và cho phép LayerManager vẽ lại text layer
+   * (cần khi kéo nhóm chọn gồm cả text lẫn image).
+   */
+  private registerSharedHitTester(): void {
+    const unregister = registerLayerGeometry("text", {
+      hit: (layer, x, y) => {
+        const bounds = this.getTextBounds(layer);
+        return !!bounds && this.isPointInText(x, y, bounds);
+      },
+      bounds: (layer) => {
+        const bounds = this.getTextBounds(layer);
+        return bounds
+          ? {
+              x: bounds.x,
+              y: bounds.y,
+              width: bounds.width,
+              height: bounds.height,
+            }
+          : null;
+      },
+    });
+    const unregisterRedraw = this.layerManager.registerRedrawHook(
+      "text",
+      (layer) => this.redrawTextLayer(layer)
+    );
+    this.unsubscribers.push(unregister, unregisterRedraw);
   }
 
   destroy(): void {
@@ -394,12 +434,33 @@ export class TextTransform {
     if (this.isEditing) return;
     const pos = this.getMousePos(e);
 
+    // Ctrl/Cmd + click: thêm/bớt text layer khỏi nhóm chọn (không kéo)
+    if (e.ctrlKey || e.metaKey) {
+      const hit = this.findTextLayerAt(pos.x, pos.y);
+      if (
+        hit &&
+        !isPointObscuredByOtherType(this.layerManager, hit.layer, pos.x, pos.y)
+      ) {
+        this.layerManager.toggleLayerSelection(hit.layer.id);
+        this.refreshSelectionOverlay();
+      }
+      return;
+    }
+
     // Kéo corner perspective nếu đang bật perspective mode VÀ Enabled đang bật
     if (this.isPerspectiveMode && this.selectedLayer?.perspectiveEnabled) {
       const bounds = this.getTextBounds(this.selectedLayer);
       if (bounds) {
         const corner = this.findPerspectiveCornerAt(pos.x, pos.y, this.selectedLayer, bounds);
-        if (corner) {
+        if (
+          corner &&
+          !isPointObscuredByOtherType(
+            this.layerManager,
+            this.selectedLayer,
+            pos.x,
+            pos.y
+          )
+        ) {
           this.activePerspectiveCorner = corner;
           this.perspectiveStartPos = { x: pos.x, y: pos.y };
           const curPts = this.selectedLayer.perspectivePoints || {
@@ -416,11 +477,24 @@ export class TextTransform {
     }
 
     const result = this.findTextLayerAt(pos.x, pos.y);
+    // Chỉ nhận thao tác khi text layer này nằm trên cùng tại điểm click. Nếu có
+    // image layer (khác loại) đè lên, nhường thao tác cho ImageTransform để
+    // tránh cả hai layer cùng bị kéo.
+    const canClaim =
+      !!result &&
+      !isPointObscuredByOtherType(
+        this.layerManager,
+        result.layer,
+        pos.x,
+        pos.y
+      );
 
-    if (result) {
+    if (result && canClaim) {
       const { layer, bounds } = result;
+      // Layer nằm trong nhóm chọn nhiều → kéo cả nhóm, không đổi cỡ chữ
+      const multi = this.isLayerInGroup(layer);
 
-      if (this.isPointInResizeHandle(pos.x, pos.y, bounds)) {
+      if (!multi && this.isPointInResizeHandle(pos.x, pos.y, bounds)) {
         this.isResizing = true;
         this.selectedLayer = layer;
         this.resizeStartY = pos.y;
@@ -433,10 +507,15 @@ export class TextTransform {
         this.dragStartY = pos.y;
         this.textStartX = layer.x;
         this.textStartY = layer.y;
+        this.multiDrag = multi
+          ? this.layerManager.captureSelectionPositions()
+          : null;
+        this.groupClickCandidate = multi ? layer : null;
         this.canvas.style.cursor = "move";
       }
 
-      this.layerManager.setActiveLayer(layer.id);
+      // Kéo nhóm thì giữ nguyên nhóm chọn (không thu về 1 layer)
+      if (!multi) this.layerManager.setActiveLayer(layer.id);
       eventBus.emit("text:selected", layer);
       eventBus.emit("text:show-properties");
 
@@ -454,10 +533,14 @@ export class TextTransform {
       if (subSidebar) subSidebar.classList.remove("hidden");
       if (body) body.classList.add("sub-open");
     } else {
-      // Không tìm thấy text layer — chỉ deselect text nếu active layer
-      // hiện tại không phải image (tránh cướp click của ImageTransform)
+      // Không tìm thấy text layer — chỉ bỏ chọn khi click KHÔNG trúng layer
+      // khác (image), tránh cướp thao tác của ImageTransform và tránh xoá
+      // nhóm layer đang chọn/kéo.
+      const hitOtherLayer = this.layerManager.layers.some(
+        (l) => l.type !== "text" && isPointOnLayer(l, pos.x, pos.y)
+      );
       const activeLayer = this.layerManager.getActiveLayer?.();
-      if (!activeLayer || activeLayer.type !== "image") {
+      if (!hitOtherLayer && (!activeLayer || activeLayer.type !== "image")) {
         this.selectedLayer = null;
         this.layerManager.setActiveLayer(0);
         this.canvas.style.cursor = "default";
@@ -501,6 +584,19 @@ export class TextTransform {
     if (this.isDragging && this.selectedLayer) {
       const dx = pos.x - this.dragStartX;
       const dy = pos.y - this.dragStartY;
+
+      if (this.multiDrag) {
+        // Kéo nhóm: dịch chuyển mọi layer đang chọn theo cùng delta
+        if (dx !== 0 || dy !== 0) this.groupClickCandidate = null;
+        this.layerManager.applySelectionPositions(this.multiDrag, dx, dy);
+        this.layerManager.drawSelectionOutlines();
+        eventBus.emit("text:moved", {
+          layer: this.selectedLayer,
+          x: this.selectedLayer.x,
+          y: this.selectedLayer.y,
+        });
+        return;
+      }
 
       this.selectedLayer.x = this.textStartX + dx;
       this.selectedLayer.y = this.textStartY + dy;
@@ -554,7 +650,10 @@ export class TextTransform {
           this.drawSelectionOverlay(this.selectedLayer);
         }
 
-        if (this.isPointInResizeHandle(pos.x, pos.y, bounds)) {
+        if (
+          !this.isMultiSelection() &&
+          this.isPointInResizeHandle(pos.x, pos.y, bounds)
+        ) {
           this.canvas.style.cursor = "ns-resize";
         } else {
           this.canvas.style.cursor = "move";
@@ -587,8 +686,13 @@ export class TextTransform {
     }
 
     if (this.isDragging || this.isResizing) {
+      const candidate = this.groupClickCandidate;
       this.isDragging = false;
       this.isResizing = false;
+      this.multiDrag = null;
+      this.groupClickCandidate = null;
+      // Bấm (không kéo) vào layer trong nhóm chọn → thu nhóm về đúng layer đó
+      if (candidate) this.layerManager.setActiveLayer(candidate.id);
 
       this.layerManager.render();
       if (this.selectedLayer) {
@@ -600,7 +704,10 @@ export class TextTransform {
 
       if (result) {
         const { bounds } = result;
-        if (this.isPointInResizeHandle(pos.x, pos.y, bounds)) {
+        if (
+          !this.isMultiSelection() &&
+          this.isPointInResizeHandle(pos.x, pos.y, bounds)
+        ) {
           this.canvas.style.cursor = "ns-resize";
         } else {
           this.canvas.style.cursor = "move";
@@ -623,6 +730,8 @@ export class TextTransform {
    */
   handleKeyDown(e: KeyboardEvent): void {
     if (this.isEditing) return;
+    // Chọn nhiều layer → ImageTransform xử lý phím chung cho cả nhóm
+    if (this.layerManager.getMovableSelectedLayers().length > 1) return;
     if (!this.selectedLayer || this.selectedLayer.type !== "text") return;
     if (!this.selectedLayer.visible || this.selectedLayer.locked) return;
 
@@ -686,6 +795,31 @@ export class TextTransform {
     this.layerManager.render();
     this.drawSelectionOverlay(layer);
     this.startTextEditing(layer);
+  }
+
+  /** Nhóm chọn đang có từ 2 layer trở lên. */
+  private isMultiSelection(): boolean {
+    return this.layerManager.getSelectedLayers().length > 1;
+  }
+
+  /** Layer có nằm trong nhóm chọn nhiều (và nhóm có thể kéo được) không? */
+  private isLayerInGroup(layer: Layer): boolean {
+    return (
+      this.layerManager.isLayerSelected(layer.id) &&
+      this.layerManager.getMovableSelectedLayers().length > 1
+    );
+  }
+
+  /** Vẽ lại overlay theo trạng thái chọn hiện tại (1 layer hay nhiều layer). */
+  private refreshSelectionOverlay(): void {
+    const selected = this.layerManager.getSelectedLayers();
+    if (selected.length > 1) {
+      this.layerManager.drawSelectionOutlines();
+      return;
+    }
+    const only = selected[0];
+    if (only && only.type === "text") this.drawSelectionOverlay(only);
+    else this.layerManager.drawSelectionOutlines();
   }
 
   /**

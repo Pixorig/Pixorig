@@ -4,6 +4,7 @@
  */
 
 import { eventBus } from "./event-bus";
+import { getLayerBounds } from "./layer-geometry";
 
 export type LayerType = "background" | "text" | "image" | "shape" | "normal";
 export type TextDecoration =
@@ -23,6 +24,15 @@ export interface LayerItemDTO {
   locked: boolean;
   opacity: number;
   isActive: boolean;
+  /** Layer đang nằm trong nhóm chọn nhiều (Ctrl + click). */
+  isSelected: boolean;
+}
+
+/** Vị trí chụp lại của một layer trước khi kéo nhóm layer. */
+export interface LayerMoveStart {
+  layer: Layer;
+  x: number;
+  y: number;
 }
 
 export class Layer {
@@ -255,8 +265,12 @@ export class LayerManager {
   mainCtx: CanvasRenderingContext2D;
   layers: Layer[] = [];
   activeLayerId = 0;
+  /** Nhóm layer đang chọn (Ctrl + click để chọn nhiều). */
+  selectedIds: number[] = [];
   private nextLayerId = 1;
   private _imageCount = 1;
+  /** Hook redraw theo loại layer - TextTransform đăng ký cho "text". */
+  private redrawHooks = new Map<string, (layer: Layer) => void>();
 
   constructor(mainCanvas: HTMLCanvasElement) {
     this.mainCanvas = mainCanvas;
@@ -366,6 +380,24 @@ export class LayerManager {
     return this.getLayer(this.activeLayerId);
   }
 
+  /**
+   * Đăng ký hàm vẽ lại nội dung của một loại layer lên chính layer canvas.
+   * Cần cho các thao tác tác động lên nhiều loại layer cùng lúc (kéo nhóm chọn).
+   */
+  registerRedrawHook(type: string, redraw: (layer: Layer) => void): () => void {
+    this.redrawHooks.set(type, redraw);
+    return () => {
+      if (this.redrawHooks.get(type) === redraw) this.redrawHooks.delete(type);
+    };
+  }
+
+  /** Vẽ lại nội dung layer lên layer canvas theo đúng loại của nó. */
+  redrawLayer(layer: Layer): void {
+    const hook = this.redrawHooks.get(layer.type);
+    if (hook) hook(layer);
+    else if (layer.type === "image") this.redrawImageLayer(layer);
+  }
+
   getBackgroundLayer(): Layer {
     return this.layers[0];
   }
@@ -375,11 +407,152 @@ export class LayerManager {
     if (layer) {
       this.activeLayerId = id;
       eventBus.emit("layer:selected", layer);
+      // Chọn 1 layer bằng click thường → nhóm chọn chỉ còn layer này
+      this.setSelection(id === 0 ? [] : [id], id);
       eventBus.emit("layer:changed", this.getLayersList());
       this.render();
       return true;
     }
     return false;
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // Nhóm layer đang chọn (Ctrl + click để chọn nhiều rồi kéo cả nhóm)
+  // ─────────────────────────────────────────────────────────
+
+  private setSelection(ids: number[], primaryId: number): void {
+    this.selectedIds = [...ids];
+    this.activeLayerId = primaryId;
+    eventBus.emit("layer:selection-changed", {
+      ids: [...this.selectedIds],
+      activeId: this.activeLayerId,
+    });
+  }
+
+  getSelectedLayers(): Layer[] {
+    return this.selectedIds
+      .map((id) => this.getLayer(id))
+      .filter((l): l is Layer => !!l);
+  }
+
+  isLayerSelected(id: number): boolean {
+    return this.selectedIds.includes(id);
+  }
+
+  /** Layer đang chọn có thể di chuyển (text/image, đang hiện, không khoá). */
+  getMovableSelectedLayers(): Layer[] {
+    return this.getSelectedLayers().filter(
+      (l) =>
+        (l.type === "text" || l.type === "image") && l.visible && !l.locked
+    );
+  }
+
+  /**
+   * Ctrl/Cmd + click: thêm layer vào nhóm chọn, hoặc bỏ ra nếu đã có.
+   */
+  toggleLayerSelection(id: number): boolean {
+    const layer = this.getLayer(id);
+    // Layer 0 (Background) luôn bị khoá nên không tham gia nhóm chọn
+    if (!layer || id === 0 || layer.locked) return false;
+
+    const next = new Set(this.selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+
+    const ids = Array.from(next);
+    let primary = this.activeLayerId;
+    if (next.has(id)) primary = id;
+    else if (primary === id) primary = ids.length ? ids[ids.length - 1] : 0;
+
+    this.setSelection(ids, primary);
+    const primaryLayer = this.getLayer(primary);
+    if (primaryLayer) eventBus.emit("layer:selected", primaryLayer);
+    eventBus.emit("layer:changed", this.getLayersList());
+    this.render();
+    return true;
+  }
+
+  clearLayerSelection(): void {
+    if (this.selectedIds.length === 0) return;
+    this.setSelection([], 0);
+    eventBus.emit("layer:changed", this.getLayersList());
+    this.render();
+  }
+
+  /** Chụp vị trí các layer có thể di chuyển trong nhóm chọn (đầu thao tác kéo). */
+  captureSelectionPositions(): LayerMoveStart[] {
+    return this.getMovableSelectedLayers().map((layer) => ({
+      layer,
+      x: layer.x,
+      y: layer.y,
+    }));
+  }
+
+  /** Áp delta kéo cho toàn bộ layer đã chụp vị trí rồi vẽ lại canvas. */
+  applySelectionPositions(
+    starts: LayerMoveStart[],
+    dx: number,
+    dy: number
+  ): void {
+    for (const start of starts) {
+      start.layer.x = Math.round(start.x + dx);
+      start.layer.y = Math.round(start.y + dy);
+      this.redrawLayer(start.layer);
+    }
+    this.render();
+  }
+
+  /** Dịch chuyển cả nhóm chọn theo delta (dùng cho phím mũi tên). */
+  moveSelectedLayers(dx: number, dy: number): void {
+    const layers = this.getMovableSelectedLayers();
+    if (layers.length === 0) return;
+    for (const layer of layers) {
+      layer.x = Math.round(layer.x + dx);
+      layer.y = Math.round(layer.y + dy);
+      this.redrawLayer(layer);
+    }
+    this.render();
+  }
+
+  /** Xoá toàn bộ layer đang chọn (bỏ qua Background) và xoá nhóm chọn. */
+  deleteSelectedLayers(): number {
+    const ids = this.getSelectedLayers()
+      .filter((l) => l.id !== 0)
+      .map((l) => l.id);
+    this.selectedIds = [];
+    this.activeLayerId = 0;
+    ids.forEach((id) => this.deleteLayer(id));
+    eventBus.emit("layer:selection-changed", { ids: [], activeId: 0 });
+    eventBus.emit("layer:changed", this.getLayersList());
+    this.render();
+    return ids.length;
+  }
+
+  /**
+   * Vẽ khung nét đứt cho mọi layer đang chọn (dùng khi chọn nhiều layer).
+   * Không vẽ handle vì thao tác resize/xoay chỉ áp dụng cho 1 layer.
+   */
+  drawSelectionOutlines(): void {
+    const layers = this.getSelectedLayers();
+    if (layers.length === 0) return;
+
+    const ctx = this.mainCtx;
+    ctx.save();
+    ctx.strokeStyle = "#00f260";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 4]);
+    layers.forEach((layer) => {
+      const bounds = getLayerBounds(layer);
+      if (!bounds) return;
+      ctx.strokeRect(
+        bounds.x - 3,
+        bounds.y - 3,
+        bounds.width + 6,
+        bounds.height + 6
+      );
+    });
+    ctx.setLineDash([]);
+    ctx.restore();
   }
 
   deleteLayer(id: number): boolean {
@@ -388,6 +561,7 @@ export class LayerManager {
     const index = this.layers.findIndex((l) => l.id === id);
     if (index > 0) {
       this.layers.splice(index, 1);
+      this.selectedIds = this.selectedIds.filter((sid) => sid !== id);
       if (this.activeLayerId === id) {
         const nextActive = this.layers[this.layers.length - 1];
         this.setActiveLayer(nextActive.id);
@@ -520,6 +694,7 @@ export class LayerManager {
       locked: layer.locked,
       opacity: layer.opacity,
       isActive: layer.id === this.activeLayerId,
+      isSelected: this.selectedIds.includes(layer.id),
     }));
   }
 }
